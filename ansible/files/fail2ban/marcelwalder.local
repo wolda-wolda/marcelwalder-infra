@@ -11,7 +11,7 @@ backend = auto
 enabled = true
 port = ssh
 mode = aggressive
-maxretry = 5
+maxretry = 8
 
 [nginx-limit-req]
 enabled = true

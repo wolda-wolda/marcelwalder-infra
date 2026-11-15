@@ -76,7 +76,7 @@ jobs:
           chmod 700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -H "$TARGET_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -t ed25519 -H "$TARGET_HOST" >> ~/.ssh/known_hosts
           echo "MAIL_SERVER_HOST=$TARGET_HOST" >> "$GITHUB_ENV"
 
       - name: Run Ansible site playbook
