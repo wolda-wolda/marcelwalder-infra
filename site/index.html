@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <script src="theme-init.js"></script>
+  <title>Marcel Walder — DevOps Engineer &amp; Software Engineering Student</title>
+  <meta name="description" content="Public CV of Marcel Walder — Working Student DevOps Engineer at NXP Semiconductors Austria and Software Engineering &amp; Management B.Sc. student at TU Graz.">
+  <meta property="og:title" content="Marcel Walder — DevOps Engineer &amp; Software Engineering">
+  <meta property="og:description" content="Cloud Infrastructure, CI/CD Automation, Linux Systems, Observability, and Industrial OT Cyber Ranges.">
+  <meta property="og:type" content="profile">
+  <meta property="og:url" content="https://marcelwalder.eu/">
+  <link rel="canonical" href="https://marcelwalder.eu/">
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a href="#main-heading" class="skip-link">Skip to main content</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#top" class="brand" aria-label="Marcel Walder home">
+        <span class="brand-mark" aria-hidden="true">MW</span>
+        <span class="brand-name">Marcel Walder</span>
+      </a>
+
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#about">About</a>
+        <a href="#experience">Experience</a>
+        <a href="#projects">Projects</a>
+        <a href="#education">Education</a>
+        <a href="#skills">Skills</a>
+        <a href="#contact">Contact</a>
+      </nav>
+
+      <div class="header-actions">
+        <button type="button" id="theme-toggle" class="icon-btn" aria-label="Toggle color theme">
+          <svg class="icon icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+          </svg>
+          <svg class="icon icon-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+          </svg>
+          <span class="visually-hidden theme-label-light">Switch to light theme</span>
+          <span class="visually-hidden theme-label-dark">Switch to dark theme</span>
+        </button>
+
+        <button type="button" id="print-cv" class="btn btn-secondary btn-compact">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 9V2h12v7"></path>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+            <rect width="12" height="8" x="6" y="14"></rect>
+          </svg>
+          <span>Print / PDF</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section id="about" class="hero container" tabindex="-1">
+      <div class="hero-grid">
+        <div class="hero-content">
+          <p class="eyebrow">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>Graz, Austria &middot; South Tyrol, Italy</span>
+          </p>
+          <h1 id="main-heading" tabindex="-1">Marcel Walder</h1>
+          <p class="hero-role">
+            DevOps Engineer (Working Student) at NXP Semiconductors Austria &middot;
+            B.Sc. Software Engineering &amp; Management at TU Graz
+          </p>
+          <p class="hero-summary">
+            I work on AWS infrastructure as code, CI/CD automation, Linux servers, and streaming data
+            observability. Alongside my work at NXP Semiconductors Austria, I study Software Engineering &amp;
+            Management at TU Graz and adapted CyberRangeCZ Lite with custom patches and OT training scenarios
+            for my Bachelor's thesis.
+          </p>
+
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="mailto:info@marcelwalder.eu">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect width="20" height="16" x="2" y="4" rx="2"></rect>
+                <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+              </svg>
+              <span>Email</span>
+            </a>
+            <a class="btn btn-secondary" href="https://github.com/wolda-wolda" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.7-2.8 5.7-5.5 6 .4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z"></path>
+              </svg>
+              <span>GitHub</span>
+            </a>
+            <a class="btn btn-secondary" href="https://www.linkedin.com/in/waldermarcel/" target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+                <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77Z"></path>
+              </svg>
+              <span>LinkedIn</span>
+            </a>
+            <button type="button" id="open-contact-modal" class="text-action">
+              Quick summary
+            </button>
+          </div>
+        </div>
+
+        <aside class="profile-card" aria-label="Profile overview">
+          <div class="profile-card-top">
+            <img
+              src="assets/avatar.png"
+              alt="Avatar of Marcel Walder"
+              width="64"
+              height="64"
+              class="avatar"
+              decoding="async"
+            >
+            <div>
+              <p class="mono-label">Curriculum vitae</p>
+              <p class="profile-handle">marcelwalder.eu</p>
+            </div>
+          </div>
+          <dl class="quick-facts">
+            <div>
+              <dt>Role</dt>
+              <dd>Working Student DevOps Engineer</dd>
+            </div>
+            <div>
+              <dt>Company</dt>
+              <dd>NXP Semiconductors Austria</dd>
+            </div>
+            <div>
+              <dt>Degree</dt>
+              <dd>B.Sc. Software Engineering &amp; Management (TU Graz)</dd>
+            </div>
+            <div>
+              <dt>Credential</dt>
+              <dd>ISO/IEC 27001:2022 Associate</dd>
+            </div>
+            <div>
+              <dt>Languages</dt>
+              <dd>German (Native), English (Full Professional)</dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
+    </section>
+
+    <section id="experience" class="section container" tabindex="-1">
+      <div class="section-header">
+        <p class="mono-label">01 &middot; Career</p>
+        <h2>Experience</h2>
+      </div>
+
+      <ol class="timeline">
+        <li class="timeline-item">
+          <div class="timeline-meta">
+            <span class="period">Nov 2023 &ndash; Present</span>
+            <span class="location">Greater Graz, Austria &middot; Hybrid</span>
+          </div>
+          <div class="timeline-body">
+            <h3>Working Student DevOps Engineer</h3>
+            <p class="org">NXP Semiconductors Austria &middot; Part-time</p>
+            <ul class="bullet-list">
+              <li>Designed, deployed, and managed scalable cloud infrastructure using AWS CloudFormation and Infrastructure as Code (IaC) principles.</li>
+              <li>Automated deployment pipelines and workflows using Atlassian Bamboo and Ansible.</li>
+              <li>Developed and maintained automation scripts in Bash and Python to streamline infrastructure processes.</li>
+              <li>Optimized and secured Linux servers to improve system reliability and security.</li>
+              <li>Maintained and enhanced monitoring for streaming data pipelines using Splunk, Apache Kafka, Burrow, Telegraf, and MS Power Automate.</li>
+            </ul>
+            <ul class="tag-list" aria-label="Technologies used at NXP">
+              <li>AWS CloudFormation</li>
+              <li>Ansible</li>
+              <li>Atlassian Bamboo</li>
+              <li>Linux</li>
+              <li>Apache Kafka</li>
+              <li>Splunk</li>
+              <li>Python &amp; Bash</li>
+            </ul>
+          </div>
+        </li>
+
+        <li class="timeline-item">
+          <div class="timeline-meta">
+            <span class="period">Mar 2022</span>
+            <span class="location">Bruneck, South Tyrol, Italy</span>
+          </div>
+          <div class="timeline-body">
+            <h3>IT System Administrator Intern</h3>
+            <p class="org">LOGon GmbH &middot; Internship</p>
+            <ul class="bullet-list">
+              <li>Installed, configured, and maintained network devices across customer and company environments.</li>
+              <li>Supported individual customer infrastructure requirements and troubleshooting requests.</li>
+              <li>Managed user accounts, Active Directory, and access rights to enforce network security standards.</li>
+            </ul>
+            <ul class="tag-list" aria-label="Technologies used at LOGon GmbH">
+              <li>Active Directory</li>
+              <li>Linux Server</li>
+              <li>Networking</li>
+              <li>Access Control</li>
+            </ul>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <section id="projects" class="section container" tabindex="-1">
+      <div class="section-header">
+        <p class="mono-label">02 &middot; Thesis &amp; repositories</p>
+        <h2>Selected Projects</h2>
+      </div>
+
+      <div class="project-grid">
+        <article class="project-card project-card-featured">
+          <div class="project-head">
+            <span class="mono-tag">Bachelor's thesis &middot; Fork &amp; patches</span>
+            <h3>CyberRangeCZ Platform Lite &mdash; IT-to-OT Extension</h3>
+          </div>
+          <p class="project-desc">
+            Forked and patched the upstream CyberRangeCZ Lite (OpenStack and Kubernetes) platform for my Bachelor's
+            thesis "From IT to OT: Feasibility of CyberRangeCZ for Industrial Control System Training". Added OT
+            training scenarios, resource and CPU steal-time measurement scripts, and reproducibility artifacts.
+          </p>
+          <div class="project-footer">
+            <span class="lang-pill">Shell &middot; Python &middot; OpenStack &middot; Kubernetes</span>
+            <a href="https://github.com/wolda-wolda/devops-crczp-lite" target="_blank" rel="noopener noreferrer">
+              Repository <span aria-hidden="true">&rarr;</span>
+            </a>
+          </div>
+        </article>
+
+        <article class="project-card">
+          <div class="project-head">
+            <span class="mono-tag">Thesis scenario &middot; Smart grid co-simulation</span>
+            <h3>Operation Blackout Zero (Smart Grid OT Sandbox)</h3>
+          </div>
+          <p class="project-desc">
+            CyberRangeCZ sandbox scenario on OpenStack Heat linking a GridLAB-D power distribution simulation
+            with OpenPLC, Node-RED, InfluxDB, and Grafana across a 4-tier Purdue network topology.
+          </p>
+          <div class="project-footer">
+            <span class="lang-pill">Python &middot; OpenPLC &middot; InfluxDB &middot; Grafana</span>
+            <a href="https://github.com/wolda-wolda/smartgrid-ot-sandbox" target="_blank" rel="noopener noreferrer">
+              Repository <span aria-hidden="true">&rarr;</span>
+            </a>
+          </div>
+        </article>
+
+        <article class="project-card">
+          <div class="project-head">
+            <span class="mono-tag">Thesis scenario &middot; Multi-zone OT</span>
+            <h3>Operation Waterborne (Complex OT Scenario)</h3>
+          </div>
+          <p class="project-desc">
+            Multi-zone water treatment training scenario structured along the Purdue model (ISA/IEC 62443 zoning),
+            automated with Ansible playbooks and Node-RED/OpenPLC configurations for CyberRangeCZ.
+          </p>
+          <div class="project-footer">
+            <span class="lang-pill">Ansible &middot; OpenPLC &middot; Node-RED</span>
+            <a href="https://github.com/wolda-wolda/complex-ot-scenario" target="_blank" rel="noopener noreferrer">
+              Repository <span aria-hidden="true">&rarr;</span>
+            </a>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="education" class="section container" tabindex="-1">
+      <div class="section-header">
+        <p class="mono-label">03 &middot; Academic &amp; credentials</p>
+        <h2>Education &amp; Certifications</h2>
+      </div>
+
+      <div class="edu-layout">
+        <div class="edu-column">
+          <h3 class="subsection-title">Education</h3>
+          <ol class="timeline compact-timeline">
+            <li class="timeline-item">
+              <div class="timeline-meta">
+                <span class="period">Sep 2023 &ndash; 2026</span>
+                <span class="location">Graz, Austria</span>
+              </div>
+              <div class="timeline-body">
+                <h4>Technische Universit&auml;t Graz (TU Graz)</h4>
+                <p class="org">Bachelor of Science (B.Sc.), Software Engineering and Management</p>
+                <p class="edu-note">Core focus: Cloud Computing, Distributed Systems (gRPC), Software Architecture, and Engineering Management.</p>
+              </div>
+            </li>
+
+            <li class="timeline-item">
+              <div class="timeline-meta">
+                <span class="period">Sep 2019 &ndash; Jun 2023</span>
+                <span class="location">Brixen, Italy</span>
+              </div>
+              <div class="timeline-body">
+                <h4>Technologische Fachoberschule J. Ph. Fallmerayer</h4>
+                <p class="org">Matura / High School Diploma, Information &amp; Communications Technology &middot; Grade: 82/100</p>
+                <p class="edu-note">
+                  Coursework in Java, C/C++, Python, Flutter, PHP, JavaScript, MySQL schema design, ISO/OSI networking,
+                  circuit diagrams, and AI fundamentals. Final thesis project: autonomous driving system.
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <div class="cert-column">
+          <h3 class="subsection-title">Licenses &amp; certifications</h3>
+          <ul class="cert-list">
+            <li class="cert-card">
+              <p class="mono-label">Issued Sep 2023</p>
+              <h4>ISO/IEC 27001:2022 Information Security Associate</h4>
+              <p class="org">SkillFront</p>
+              <p class="credential-id">Credential ID: <code>38109147871887</code></p>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="skills" class="section container" tabindex="-1">
+      <div class="section-header">
+        <p class="mono-label">04 &middot; Tooling &amp; languages</p>
+        <h2>Technical Skills</h2>
+      </div>
+
+      <div class="skills-grid">
+        <div class="skill-group">
+          <h3>Cloud &amp; Infrastructure</h3>
+          <ul>
+            <li>AWS CloudFormation (IaC)</li>
+            <li>OpenStack &amp; Heat</li>
+            <li>Kubernetes &amp; Container Orchestration</li>
+            <li>Linux Server Administration</li>
+            <li>Active Directory &amp; IAM</li>
+          </ul>
+        </div>
+
+        <div class="skill-group">
+          <h3>CI/CD &amp; Automation</h3>
+          <ul>
+            <li>Atlassian Bamboo</li>
+            <li>Ansible</li>
+            <li>Python Automation</li>
+            <li>Bash / Shell Scripting</li>
+            <li>MS Power Automate</li>
+          </ul>
+        </div>
+
+        <div class="skill-group">
+          <h3>Observability &amp; Data</h3>
+          <ul>
+            <li>Splunk &amp; Splunk Cloud</li>
+            <li>Apache Kafka</li>
+            <li>Burrow &amp; Telegraf</li>
+            <li>InfluxDB &amp; Grafana</li>
+            <li>MySQL</li>
+          </ul>
+        </div>
+
+        <div class="skill-group">
+          <h3>Development &amp; Languages</h3>
+          <ul>
+            <li>Java, C / C++</li>
+            <li>Flutter / Dart</li>
+            <li>HTML, CSS, JavaScript, PHP</li>
+            <li>gRPC &amp; Distributed Systems</li>
+            <li>German (Native) &middot; English (Full Professional)</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="contact" class="section container" tabindex="-1">
+      <div class="contact-banner">
+        <div>
+          <p class="mono-label">05 &middot; Connect</p>
+          <h2>Get in Touch</h2>
+          <p class="contact-copy">
+            Open to DevOps engineering, cloud infrastructure, and software engineering collaborations
+          </p>
+        </div>
+        <div class="contact-links">
+          <a class="btn btn-primary" href="mailto:info@marcelwalder.eu">
+            info@marcelwalder.eu
+          </a>
+          <a class="btn btn-secondary" href="https://www.linkedin.com/in/waldermarcel/" target="_blank" rel="noopener noreferrer">
+            LinkedIn
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/wolda-wolda" target="_blank" rel="noopener noreferrer">
+            GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>&copy; <span id="year">2026</span> Marcel Walder &middot; <a href="https://marcelwalder.eu">marcelwalder.eu</a></p>
+      <p class="footer-note">
+        Self-hosted static CV &middot;
+        <button type="button" id="open-legal-modal" class="footer-link-btn">
+          Legal &amp; Privacy (Impressum / Datenschutz)
+        </button>
+      </p>
+    </div>
+  </footer>
+
+  <dialog id="contact-dialog" aria-labelledby="dialog-title">
+    <form method="dialog" class="dialog-panel">
+      <div class="dialog-header">
+        <h2 id="dialog-title">Quick Profile Summary</h2>
+        <button type="submit" value="close" class="icon-btn" aria-label="Close dialog">&times;</button>
+      </div>
+      <dl class="dialog-facts">
+        <div>
+          <dt>Name</dt>
+          <dd>Marcel Walder</dd>
+        </div>
+        <div>
+          <dt>Email</dt>
+          <dd><a href="mailto:info@marcelwalder.eu">info@marcelwalder.eu</a></dd>
+        </div>
+        <div>
+          <dt>Domain</dt>
+          <dd><code>marcelwalder.eu</code></dd>
+        </div>
+        <div>
+          <dt>Location</dt>
+          <dd>Graz, Austria / South Tyrol, Italy</dd>
+        </div>
+        <div>
+          <dt>GitHub</dt>
+          <dd><a href="https://github.com/wolda-wolda" target="_blank" rel="noopener noreferrer">github.com/wolda-wolda</a></dd>
+        </div>
+        <div>
+          <dt>LinkedIn</dt>
+          <dd><a href="https://www.linkedin.com/in/waldermarcel/" target="_blank" rel="noopener noreferrer">linkedin.com/in/waldermarcel</a></dd>
+        </div>
+      </dl>
+      <div class="dialog-actions">
+        <button type="button" id="dialog-print-btn" class="btn btn-primary">Print / Save as PDF</button>
+        <button type="submit" value="close" class="btn btn-secondary">Close</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="legal-dialog" class="legal-dialog" aria-labelledby="legal-dialog-title">
+    <form method="dialog" class="dialog-panel">
+      <div class="dialog-header">
+        <h2 id="legal-dialog-title">Legal Notice &amp; Privacy Policy</h2>
+        <button type="submit" value="close" class="icon-btn" aria-label="Close dialog">&times;</button>
+      </div>
+      <div class="legal-copy">
+        <div>
+          <h3>Site Operator &amp; Disclosure (&sect; 25 MedienG / Art. 13 GDPR)</h3>
+          <p>
+            Marcel Walder, Graz, Austria. Contact:
+            <a href="mailto:info@marcelwalder.eu">info@marcelwalder.eu</a>.
+            This private, non-commercial website serves as an online curriculum vitae and software engineering portfolio.
+          </p>
+        </div>
+        <div>
+          <h3>No Third-Party Tracking or Cookies</h3>
+          <p>
+            All HTML, stylesheets, scripts, web fonts, and images are self-hosted on this server. No cookies, analytics,
+            advertising trackers, or third-party CDN requests are made when loading this site.
+          </p>
+        </div>
+        <div>
+          <h3>Server Access Logs</h3>
+          <p>
+            To ensure technical reliability and security, the web server (Nginx) temporarily records standard HTTP
+            request metadata (IP address, timestamp, requested resource, HTTP status code, referrer, and user-agent)
+            on the basis of legitimate interest (Art. 6(1)(f) GDPR). Access logs rotate daily and are deleted after
+            14 days.
+          </p>
+        </div>
+        <div>
+          <h3>Local Theme Preference</h3>
+          <p>
+            Using the theme toggle saves your <code>light</code> or <code>dark</code> preference solely in your browser's
+            <code>localStorage</code> under the key <code>color-scheme</code>. Toggling back to match your OS preference
+            deletes that entry. Nothing is transmitted to the server.
+          </p>
+        </div>
+        <div>
+          <h3>Email Inquiries &amp; Data Subject Rights</h3>
+          <p>
+            Messages sent to <a href="mailto:info@marcelwalder.eu">info@marcelwalder.eu</a> are processed solely to handle
+            your inquiry (Art. 6(1)(b)/(f) GDPR). Under GDPR (Art. 15&ndash;22, 77) you have rights of access,
+            rectification, erasure, restriction, data portability, objection, and complaint to a supervisory authority
+            (in Austria:
+            <a href="https://www.dsb.gv.at/" target="_blank" rel="noopener noreferrer">&Ouml;sterreichische Datenschutzbeh&ouml;rde</a>;
+            across the EU/EEA, any national data protection authority listed by the
+            <a href="https://www.edpb.europa.eu/about-edpb/our-members_en" target="_blank" rel="noopener noreferrer">European Data Protection Board (EDPB)</a>).
+          </p>
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button type="submit" value="close" class="btn btn-secondary">Close</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

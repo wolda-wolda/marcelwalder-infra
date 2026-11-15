@@ -1,0 +1,55 @@
+---
+- name: Deploy marcelwalder.eu static CV and Nginx security headers
+  hosts: web_hosts
+  gather_facts: false
+
+  vars:
+    site_src: "{{ playbook_dir }}/../../site/"
+    site_dest: "/var/www/marcelwalder.eu"
+
+  tasks:
+    - name: Ensure target web root directory exists
+      ansible.builtin.file:
+        path: "{{ site_dest }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0755"
+
+    - name: Ensure Nginx snippets directory exists
+      ansible.builtin.file:
+        path: /etc/nginx/snippets
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install Nginx security headers snippet
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-security-headers.conf"
+        dest: /etc/nginx/snippets/marcelwalder-security-headers.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Sync static site bundle to web root
+      ansible.posix.synchronize:
+        src: "{{ site_src }}"
+        dest: "{{ site_dest }}/"
+        delete: true
+        recursive: true
+        rsync_opts:
+          - "--chown=www-data:www-data"
+          - "--chmod=D755,F644"
+
+  handlers:
+    - name: Validate and reload nginx
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      notify: Reload nginx service
+
+    - name: Reload nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

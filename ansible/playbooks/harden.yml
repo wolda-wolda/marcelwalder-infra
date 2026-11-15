@@ -1,0 +1,34 @@
+---
+- name: Baseline hardening for newly provisioned Ubuntu OCI VMs
+  hosts: "{{ target_hosts | default('none') }}"
+  become: true
+
+  tasks:
+    - name: Install baseline packages and unattended upgrades
+      ansible.builtin.apt:
+        name:
+          - unattended-upgrades
+          - fail2ban
+          - curl
+          - rsync
+        state: present
+        update_cache: true
+
+    - name: Enable unattended security updates
+      ansible.builtin.service:
+        name: unattended-upgrades
+        enabled: true
+        state: started
+
+    - name: Disable SSH password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+      notify: Restart sshd
+
+  handlers:
+    - name: Restart sshd
+      ansible.builtin.service:
+        name: ssh
+        state: restarted

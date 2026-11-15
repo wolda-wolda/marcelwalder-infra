@@ -1,0 +1,88 @@
+name: Deploy Static CV Site
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - "ansible/**"
+      - ".github/workflows/deploy-site.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - "ansible/**"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify-compliance:
+    name: Verify Self-Hosted & CSP Hygiene
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for external asset leaks or inline scripts
+        shell: bash
+        run: |
+          if grep -rnE "fonts\.googleapis\.com|fonts\.gstatic\.com|avatars\.githubusercontent\.com" site/; then
+            echo "ERROR: External font/avatar CDN reference detected in site/"
+            exit 1
+          fi
+          if grep -rnE "<script[^>]*>[^<]" site/index.html; then
+            echo "ERROR: Inline script detected in site/index.html (violates script-src 'self')"
+            exit 1
+          fi
+          echo "Compliance checks passed: 100% self-hosted assets and CSP-safe scripts."
+
+  deploy:
+    name: Deploy via Ansible
+    needs: verify-compliance
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install ansible-core
+
+      - name: Install Ansible POSIX collection
+        run: ansible-galaxy collection install ansible.posix
+
+      - name: Configure SSH key
+        shell: bash
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.MAIL_SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Run Ansible site playbook
+        working-directory: ansible
+        env:
+          MAIL_SERVER_HOST: ${{ secrets.MAIL_SERVER_HOST }}
+          ANSIBLE_HOST_KEY_CHECKING: "True"
+        run: |
+          ansible-playbook playbooks/site.yml --private-key ~/.ssh/id_deploy
+
+      - name: Smoke test live HTTPS endpoint and CSP header
+        shell: bash
+        run: |
+          headers=$(curl -fsS -I https://marcelwalder.eu/)
+          echo "$headers"
+          echo "$headers" | grep -qi "^content-security-policy:"
+          echo "$headers" | grep -qi "^strict-transport-security:"

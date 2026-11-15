@@ -1,0 +1,31 @@
+# OpenTofu / Terraform local files
+**/.terraform/
+**/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example
+!topology.auto.tfvars
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Secrets & keys
+*.pem
+*.key
+*.env
+*.local.env
+.env*
+
+# Ansible & Python
+ansible/*.retry
+__pycache__/
+*.pyc
+.venv/
+
+# OS / Editor
+.DS_Store
+Thumbs.db

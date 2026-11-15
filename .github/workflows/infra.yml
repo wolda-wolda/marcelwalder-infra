@@ -1,0 +1,220 @@
+name: Infrastructure (OpenTofu)
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+  workflow_dispatch:
+
+concurrency:
+  group: oci-infra-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  AWS_ACCESS_KEY_ID: ${{ secrets.OCI_S3_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.OCI_S3_SECRET_ACCESS_KEY }}
+  AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+  AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+  TF_VAR_state_passphrase: ${{ secrets.TOFU_STATE_PASSPHRASE }}
+  TF_VAR_compartment_id: ${{ secrets.OCI_COMPARTMENT_OCID }}
+  OCI_TENANCY_OCID: ${{ secrets.OCI_TENANCY_OCID }}
+  OCI_USER_OCID: ${{ secrets.OCI_USER_OCID }}
+  OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+  OCI_REGION: eu-frankfurt-1
+
+jobs:
+  plan-prod:
+    name: Plan OCI Infrastructure (prod)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.9
+
+      - name: Configure OCI API key and SSH public keys
+        shell: bash
+        run: |
+          mkdir -p ~/.oci
+          chmod 700 ~/.oci
+          printf '%s\n' "${{ secrets.OCI_PRIVATE_KEY_PEM }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+          echo "OCI_PRIVATE_KEY_PATH=${HOME}/.oci/oci_api_key.pem" >> "$GITHUB_ENV"
+          echo "TF_VAR_ssh_authorized_keys=${{ secrets.VM_SSH_AUTHORIZED_KEYS_JSON }}" >> "$GITHUB_ENV"
+
+      - name: Format check
+        working-directory: infra
+        run: tofu fmt -check -recursive
+
+      - name: OpenTofu Init (prod)
+        working-directory: infra/live/prod
+        run: tofu init -input=false
+
+      - name: OpenTofu Validate (prod)
+        working-directory: infra/live/prod
+        run: tofu validate
+
+      - name: OpenTofu Plan (prod)
+        working-directory: infra/live/prod
+        run: tofu plan -input=false -no-color | tee plan.txt
+
+      - name: Post Plan Summary on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infra/live/prod/plan.txt', 'utf8');
+            const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n... (truncated)' : plan;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `### OpenTofu Plan (\`infra/live/prod\`)\n\`\`\`hcl\n${truncated}\n\`\`\``
+            });
+
+  apply-prod:
+    name: Apply OCI Infrastructure (prod)
+    needs: plan-prod
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.9
+
+      - name: Configure OCI API key and SSH public keys
+        shell: bash
+        run: |
+          mkdir -p ~/.oci
+          chmod 700 ~/.oci
+          printf '%s\n' "${{ secrets.OCI_PRIVATE_KEY_PEM }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+          echo "OCI_PRIVATE_KEY_PATH=${HOME}/.oci/oci_api_key.pem" >> "$GITHUB_ENV"
+          echo "TF_VAR_ssh_authorized_keys=${{ secrets.VM_SSH_AUTHORIZED_KEYS_JSON }}" >> "$GITHUB_ENV"
+
+      - name: OpenTofu Init (prod)
+        working-directory: infra/live/prod
+        run: tofu init -input=false
+
+      - name: OpenTofu Apply (prod)
+        working-directory: infra/live/prod
+        run: tofu apply -input=false -auto-approve
+
+  plan-dns:
+    name: Plan Porkbun DNS (marcelwalder.eu)
+    needs: plan-prod
+    runs-on: ubuntu-latest
+    env:
+      PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
+      PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.9
+
+      - name: Check Porkbun secrets presence
+        id: check_dns
+        shell: bash
+        run: |
+          if [ -n "$PORKBUN_API_KEY" ] && [ -n "$PORKBUN_SECRET_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Porkbun secrets not set yet; skipping DNS plan."
+          fi
+
+      - name: OpenTofu Init (dns)
+        if: steps.check_dns.outputs.enabled == 'true'
+        working-directory: infra/live/dns
+        run: tofu init -input=false
+
+      - name: OpenTofu Validate (dns)
+        if: steps.check_dns.outputs.enabled == 'true'
+        working-directory: infra/live/dns
+        run: tofu validate
+
+      - name: OpenTofu Plan (dns)
+        if: steps.check_dns.outputs.enabled == 'true'
+        working-directory: infra/live/dns
+        run: tofu plan -input=false -no-color | tee plan.txt
+
+      - name: Post DNS Plan Summary on PR
+        if: github.event_name == 'pull_request' && steps.check_dns.outputs.enabled == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infra/live/dns/plan.txt', 'utf8');
+            const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n... (truncated)' : plan;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `### OpenTofu Plan (\`infra/live/dns\`)\n\`\`\`hcl\n${truncated}\n\`\`\``
+            });
+
+  apply-dns:
+    name: Apply Porkbun DNS (marcelwalder.eu)
+    needs: [apply-prod, plan-dns]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
+      PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.13.9
+
+      - name: Check Porkbun secrets presence
+        id: check_dns
+        shell: bash
+        run: |
+          if [ -n "$PORKBUN_API_KEY" ] && [ -n "$PORKBUN_SECRET_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Porkbun secrets not set yet; skipping DNS apply."
+          fi
+
+      - name: OpenTofu Init (dns)
+        if: steps.check_dns.outputs.enabled == 'true'
+        working-directory: infra/live/dns
+        run: tofu init -input=false
+
+      - name: OpenTofu Apply (dns)
+        if: steps.check_dns.outputs.enabled == 'true'
+        working-directory: infra/live/dns
+        run: tofu apply -input=false -auto-approve

@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars for local OpenTofu runs (gitignored).
+# In GitHub Actions, pass these via TF_VAR_* environment variables from Secrets.
+
+compartment_id      = "ocid1.tenancy.oc1..replace_with_compartment_ocid"
+state_passphrase    = "replace-with-random-passphrase-at-least-16-chars"
+ssh_authorized_keys = ["ssh-ed25519 AAAA..."]

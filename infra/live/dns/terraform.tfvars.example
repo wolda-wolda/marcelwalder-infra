@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars for local OpenTofu runs (gitignored).
+# In GitHub Actions, pass TF_VAR_state_passphrase, PORKBUN_API_KEY, and PORKBUN_SECRET_KEY via Secrets.
+
+domain           = "marcelwalder.eu"
+state_passphrase = "replace-with-random-passphrase-at-least-16-chars"
