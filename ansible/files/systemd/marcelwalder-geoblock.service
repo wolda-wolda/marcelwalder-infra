@@ -1,0 +1,14 @@
+[Unit]
+Description=Restore marcelwalder_geoblock nftables table on boot
+DefaultDependencies=no
+After=local-fs.target
+Before=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'if [ -s /etc/marcelwalder/geoblock.nft ]; then /usr/sbin/nft -f /etc/marcelwalder/geoblock.nft; fi'
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,7 @@
           - unattended-upgrades
           - fail2ban
           - python3-systemd
+          - nftables
           - curl
           - rsync
         state: present
@@ -46,6 +47,62 @@
         enabled: true
         state: started
 
+    - name: Ensure geoblock configuration directory exists
+      ansible.builtin.file:
+        path: /etc/marcelwalder
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install sanctioned-country list configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/geoblock/geoblock.conf"
+        dest: /etc/marcelwalder/geoblock.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Refresh geoblock rules
+
+    - name: Install geoblock update script (nftables + Nginx geo)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/geoblock/update-geoblock.sh"
+        dest: /usr/local/sbin/marcelwalder-geoblock-update
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Refresh geoblock rules
+
+    - name: Install geoblock systemd units and weekly timer
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/systemd/{{ item }}"
+        dest: "/etc/systemd/system/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - marcelwalder-geoblock.service
+        - marcelwalder-geoblock-update.service
+        - marcelwalder-geoblock-update.timer
+      notify: Reload systemd daemon
+
+    - name: Flush handlers before enabling geoblock services
+      ansible.builtin.meta: flush_handlers
+
+    - name: Populate initial geoblock ruleset if missing
+      ansible.builtin.command: /usr/local/sbin/marcelwalder-geoblock-update
+      args:
+        creates: /etc/marcelwalder/geoblock.nft
+
+    - name: Enable geoblock boot service and weekly refresh timer
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: true
+        state: started
+      loop:
+        - marcelwalder-geoblock.service
+        - marcelwalder-geoblock-update.timer
+
     - name: Disable SSH password authentication
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
@@ -64,6 +121,14 @@
       ansible.builtin.service:
         name: fail2ban
         state: restarted
+
+    - name: Reload systemd daemon
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Refresh geoblock rules
+      ansible.builtin.command: /usr/local/sbin/marcelwalder-geoblock-update
+      changed_when: true
 
     - name: Restart sshd
       ansible.builtin.service:

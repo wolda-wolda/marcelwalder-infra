@@ -17,14 +17,28 @@
         group: www-data
         mode: "0755"
 
-    - name: Ensure Nginx snippets directory exists
+    - name: Ensure Nginx snippets and geo directories exist
       become: true
       ansible.builtin.file:
-        path: /etc/nginx/snippets
+        path: "{{ item }}"
         state: directory
         owner: root
         group: root
         mode: "0755"
+      loop:
+        - /etc/nginx/snippets
+        - /etc/nginx/geo
+
+    - name: Ensure placeholder Nginx geo CIDR file exists before config test
+      become: true
+      ansible.builtin.copy:
+        content: "# Placeholder populated by marcelwalder-geoblock-update\n"
+        dest: /etc/nginx/geo/blocked-countries.inc
+        owner: root
+        group: root
+        mode: "0644"
+        force: false
+      notify: Validate and reload nginx
 
     - name: Install Nginx security headers snippet
       become: true
