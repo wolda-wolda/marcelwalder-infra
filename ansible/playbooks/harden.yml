@@ -145,14 +145,14 @@
 
     - name: Ensure Uptime Kuma directories exist
       ansible.builtin.file:
-        path: "{{ item }}"
+        path: "{{ item.path }}"
         state: directory
         owner: root
         group: root
-        mode: "0755"
+        mode: "{{ item.mode }}"
       loop:
-        - /opt/uptime-kuma
-        - /opt/uptime-kuma/data
+        - { path: /opt/uptime-kuma, mode: "0755" }
+        - { path: /opt/uptime-kuma/data, mode: "0700" }
 
     - name: Install Uptime Kuma Docker Compose manifest
       ansible.builtin.copy:
@@ -190,6 +190,11 @@
       retries: 20
       delay: 5
       until: kuma_health.status is defined and kuma_health.status in [200, 302]
+
+    - name: Remove temporary unencrypted Uptime Kuma pre-upgrade archive
+      ansible.builtin.file:
+        path: /var/backups/uptime-kuma-pre-upgrade.tar.gz
+        state: absent
 
     - name: Install GoAccess static report update script
       ansible.builtin.copy:
@@ -329,6 +334,17 @@
         regexp: "^#?PasswordAuthentication"
         line: "PasswordAuthentication no"
       notify: Restart sshd
+
+    - name: Stop and mask unused rpcbind services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: false
+        masked: true
+        state: stopped
+      loop:
+        - rpcbind.socket
+        - rpcbind.service
+      failed_when: false
 
   handlers:
     - name: Run fail2ban config test

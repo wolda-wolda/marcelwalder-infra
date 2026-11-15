@@ -8,5 +8,10 @@ services:
     volumes:
       - /opt/uptime-kuma/data:/app/data
     mem_limit: 256m
+    pids_limit: 256
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
     security_opt:
       - no-new-privileges:true
