@@ -1,0 +1,7 @@
+[Unit]
+Description=Generate static GoAccess HTML analytics report from Nginx logs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/marcelwalder-goaccess-update
+Nice=10

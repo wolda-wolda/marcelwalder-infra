@@ -17,7 +17,7 @@
         group: www-data
         mode: "0755"
 
-    - name: Ensure Nginx snippets and geo directories exist
+    - name: Ensure Nginx, Certbot webroot, and internal analytics directories exist
       become: true
       ansible.builtin.file:
         path: "{{ item }}"
@@ -28,6 +28,23 @@
       loop:
         - /etc/nginx/snippets
         - /etc/nginx/geo
+        - /var/www/certbot-status
+        - /var/www/internal/goaccess
+
+    - name: Configure sysctl for WireGuard bind tolerance
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/systemd/99-marcelwalder-wireguard.conf"
+        dest: /etc/sysctl.d/99-marcelwalder-wireguard.conf
+        owner: root
+        group: root
+        mode: "0644"
+      register: wireguard_sysctl
+
+    - name: Apply WireGuard sysctl immediately when changed
+      become: true
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/99-marcelwalder-wireguard.conf
+      when: wireguard_sysctl.changed
 
     - name: Ensure placeholder Nginx geo CIDR file exists before config test
       become: true
@@ -39,6 +56,16 @@
         mode: "0644"
         force: false
       notify: Validate and reload nginx
+
+    - name: Ensure placeholder internal GoAccess report exists before first timer run
+      become: true
+      ansible.builtin.copy:
+        content: "<!doctype html><title>GoAccess</title><p>Initial analytics report pending timer run.</p>\n"
+        dest: /var/www/internal/goaccess/index.html
+        owner: root
+        group: root
+        mode: "0644"
+        force: false
 
     - name: Install Nginx security headers snippet
       become: true
@@ -85,6 +112,79 @@
       ansible.builtin.file:
         src: /etc/nginx/sites-available/marcelwalder.eu
         dest: /etc/nginx/sites-enabled/marcelwalder.eu
+        state: link
+      notify: Validate and reload nginx
+
+    - name: Check whether status.marcelwalder.eu TLS certificate exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/letsencrypt/live/status.marcelwalder.eu/fullchain.pem
+      register: status_cert
+
+    - name: Install HTTP bootstrap vhost for status.marcelwalder.eu ACME issuance
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/status.marcelwalder.eu.bootstrap.conf"
+        dest: /etc/nginx/sites-available/status.marcelwalder.eu
+        owner: root
+        group: root
+        mode: "0644"
+      when: not status_cert.stat.exists
+
+    - name: Enable status.marcelwalder.eu site before ACME challenge
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/status.marcelwalder.eu
+        dest: /etc/nginx/sites-enabled/status.marcelwalder.eu
+        state: link
+      when: not status_cert.stat.exists
+
+    - name: Reload Nginx with HTTP bootstrap vhost before Certbot webroot challenge
+      become: true
+      ansible.builtin.shell: nginx -t && systemctl reload nginx
+      when: not status_cert.stat.exists
+
+    - name: Issue Let's Encrypt ECDSA certificate for status.marcelwalder.eu
+      become: true
+      ansible.builtin.command: >
+        certbot certonly --webroot -w /var/www/certbot-status
+        --non-interactive --agree-tos --email info@marcelwalder.eu
+        --key-type ecdsa -d status.marcelwalder.eu
+      when: not status_cert.stat.exists
+
+    - name: Install status.marcelwalder.eu Nginx reverse-proxy virtual host config
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/status.marcelwalder.eu.conf"
+        dest: /etc/nginx/sites-available/status.marcelwalder.eu
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Ensure status.marcelwalder.eu Nginx site is enabled
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/status.marcelwalder.eu
+        dest: /etc/nginx/sites-enabled/status.marcelwalder.eu
+        state: link
+      notify: Validate and reload nginx
+
+    - name: Install internal-only GoAccess & node_exporter Nginx vhost
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-internal-admin.conf"
+        dest: /etc/nginx/sites-available/marcelwalder-internal-admin
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Ensure internal admin Nginx site is enabled
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/marcelwalder-internal-admin
+        dest: /etc/nginx/sites-enabled/marcelwalder-internal-admin
         state: link
       notify: Validate and reload nginx
 

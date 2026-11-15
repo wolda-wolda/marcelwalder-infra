@@ -90,6 +90,10 @@ jobs:
         working-directory: ansible
         env:
           ANSIBLE_HOST_KEY_CHECKING: "True"
+          OCI_S3_ACCESS_KEY_ID: ${{ secrets.OCI_S3_ACCESS_KEY_ID }}
+          OCI_S3_SECRET_ACCESS_KEY: ${{ secrets.OCI_S3_SECRET_ACCESS_KEY }}
+          RESTIC_PASSWORD: ${{ secrets.RESTIC_PASSWORD }}
+          WG_CLIENT_PUBLIC_KEY: ${{ secrets.WG_CLIENT_PUBLIC_KEY }}
         run: |
           ansible-playbook playbooks/harden.yml -e target_hosts=web_hosts --private-key ~/.ssh/id_deploy
 
@@ -118,3 +122,11 @@ jobs:
           echo "$robots_body" | grep -q "^User-agent: GPTBot"
           echo "$robots_body" | grep -q "^Allow: /"
           echo "Verified /robots.txt served cleanly."
+
+          sec_body=$(curl -fsS https://marcelwalder.eu/.well-known/security.txt)
+          echo "$sec_body" | grep -q "^Contact: mailto:info@marcelwalder.eu"
+          echo "Verified /.well-known/security.txt served cleanly."
+
+          status_code=$(curl -sS -o /dev/null -w "%{http_code}" https://status.marcelwalder.eu/)
+          echo "GET https://status.marcelwalder.eu/ returned HTTP $status_code"
+          [[ "$status_code" =~ ^(200|302)$ ]]

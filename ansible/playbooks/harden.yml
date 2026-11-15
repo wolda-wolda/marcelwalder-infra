@@ -3,7 +3,24 @@
   hosts: "{{ target_hosts | default('none') }}"
   become: true
 
+  vars:
+    oci_s3_access_key_id: "{{ lookup('env', 'OCI_S3_ACCESS_KEY_ID') }}"
+    oci_s3_secret_access_key: "{{ lookup('env', 'OCI_S3_SECRET_ACCESS_KEY') }}"
+    restic_password: "{{ lookup('env', 'RESTIC_PASSWORD') }}"
+    wg_client_public_key: "{{ lookup('env', 'WG_CLIENT_PUBLIC_KEY') }}"
+
   tasks:
+    - name: Verify required backup and WireGuard environment secrets are supplied
+      ansible.builtin.assert:
+        that:
+          - oci_s3_access_key_id | length > 0
+          - oci_s3_secret_access_key | length > 0
+          - restic_password | length > 0
+          - wg_client_public_key | length > 0
+        fail_msg: "Missing OCI_S3_*, RESTIC_PASSWORD, or WG_CLIENT_PUBLIC_KEY env vars."
+        quiet: true
+      no_log: true
+
     - name: Install baseline packages and unattended upgrades
       ansible.builtin.apt:
         name:
@@ -11,6 +28,10 @@
           - fail2ban
           - python3-systemd
           - nftables
+          - restic
+          - goaccess
+          - wireguard-tools
+          - prometheus-node-exporter
           - curl
           - rsync
         state: present
@@ -73,7 +94,7 @@
         mode: "0755"
       notify: Refresh geoblock rules
 
-    - name: Install geoblock systemd units and weekly timer
+    - name: Install geoblock, GoAccess, and Restic systemd units and timers
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/systemd/{{ item }}"
         dest: "/etc/systemd/system/{{ item }}"
@@ -84,6 +105,10 @@
         - marcelwalder-geoblock.service
         - marcelwalder-geoblock-update.service
         - marcelwalder-geoblock-update.timer
+        - marcelwalder-goaccess.service
+        - marcelwalder-goaccess.timer
+        - marcelwalder-restic-backup.service
+        - marcelwalder-restic-backup.timer
       notify: Reload systemd daemon
 
     - name: Flush handlers before enabling geoblock services
@@ -102,6 +127,190 @@
       loop:
         - marcelwalder-geoblock.service
         - marcelwalder-geoblock-update.timer
+
+    - name: Configure prometheus-node-exporter to bind localhost only
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/monitoring/prometheus-node-exporter.default"
+        dest: /etc/default/prometheus-node-exporter
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart node_exporter
+
+    - name: Ensure prometheus-node-exporter is enabled and running
+      ansible.builtin.systemd_service:
+        name: prometheus-node-exporter
+        enabled: true
+        state: started
+
+    - name: Ensure Uptime Kuma directories exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - /opt/uptime-kuma
+        - /opt/uptime-kuma/data
+
+    - name: Install Uptime Kuma Docker Compose manifest
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/monitoring/uptime-kuma-compose.yml"
+        dest: /opt/uptime-kuma/compose.yml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Ensure Uptime Kuma container is running
+      ansible.builtin.command: docker compose -f /opt/uptime-kuma/compose.yml up -d --remove-orphans
+      register: uptime_kuma_up
+      changed_when: >-
+        'Started' in uptime_kuma_up.stderr
+        or 'Created' in uptime_kuma_up.stderr
+        or 'Recreated' in uptime_kuma_up.stderr
+
+    - name: Wait for Uptime Kuma HTTP backend on localhost:3001
+      ansible.builtin.uri:
+        url: http://127.0.0.1:3001/
+        status_code: [200, 302]
+        follow_redirects: none
+      register: kuma_health
+      retries: 15
+      delay: 4
+      until: kuma_health.status is defined and kuma_health.status in [200, 302]
+
+    - name: Install GoAccess static report update script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/monitoring/goaccess-update.sh"
+        dest: /usr/local/sbin/marcelwalder-goaccess-update
+        owner: root
+        group: root
+        mode: "0755"
+      notify: Refresh GoAccess report
+
+    - name: Generate initial GoAccess report if only placeholder exists
+      ansible.builtin.shell: |
+        if ! grep -q "goaccess" /var/www/internal/goaccess/index.html 2>/dev/null; then
+            /usr/local/sbin/marcelwalder-goaccess-update
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Enable and start GoAccess analytics timer
+      ansible.builtin.systemd_service:
+        name: marcelwalder-goaccess.timer
+        enabled: true
+        state: started
+
+    - name: Install Restic S3 credentials and passphrase environment file
+      ansible.builtin.copy:
+        content: |
+          AWS_ACCESS_KEY_ID={{ oci_s3_access_key_id }}
+          AWS_SECRET_ACCESS_KEY={{ oci_s3_secret_access_key }}
+          AWS_DEFAULT_REGION=eu-frankfurt-1
+          RESTIC_REPOSITORY=s3:https://frlsvddoxbrh.compat.objectstorage.eu-frankfurt-1.oraclecloud.com/backups-marcelwalder-prod
+          RESTIC_PASSWORD={{ restic_password }}
+        dest: /etc/marcelwalder/restic.env
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Install Restic encrypted offsite backup script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/backup/restic-backup.sh"
+        dest: /usr/local/sbin/marcelwalder-restic-backup
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Enable and start daily Restic offsite backup timer
+      ansible.builtin.systemd_service:
+        name: marcelwalder-restic-backup.timer
+        enabled: true
+        state: started
+
+    - name: Initialize Restic repository and run first encrypted offsite backup
+      ansible.builtin.shell: /usr/local/sbin/marcelwalder-restic-backup && touch /etc/marcelwalder/.restic-bootstrapped
+      args:
+        executable: /bin/bash
+        creates: /etc/marcelwalder/.restic-bootstrapped
+
+    - name: Ensure WireGuard directory exists with restricted permissions
+      ansible.builtin.file:
+        path: /etc/wireguard
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Generate WireGuard server keypair if missing
+      ansible.builtin.shell: |
+        umask 077
+        wg genkey | tee /etc/wireguard/server.key | wg pubkey > /etc/wireguard/server.pub
+      args:
+        executable: /bin/bash
+        creates: /etc/wireguard/server.key
+
+    - name: Read WireGuard server private key
+      ansible.builtin.slurp:
+        src: /etc/wireguard/server.key
+      register: wg_server_key_raw
+      no_log: true
+
+    - name: Configure WireGuard wg0 admin mesh interface
+      ansible.builtin.copy:
+        content: |
+          [Interface]
+          Address = 10.66.66.1/24
+          ListenPort = 51820
+          PrivateKey = {{ wg_server_key_raw.content | b64decode | trim }}
+
+          [Peer]
+          # Admin peer (laptop/workstation)
+          PublicKey = {{ wg_client_public_key }}
+          AllowedIPs = 10.66.66.2/32
+        dest: /etc/wireguard/wg0.conf
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      notify: Restart wg-quick@wg0
+
+    - name: Persist WireGuard UDP 51820 and wg0 rules in /etc/iptables/rules.v4
+      ansible.builtin.lineinfile:
+        path: /etc/iptables/rules.v4
+        insertbefore: "^-A INPUT -j REJECT"
+        line: "{{ item }}"
+      loop:
+        - "-A INPUT -p udp -m udp --dport 51820 -j ACCEPT"
+        - "-A INPUT -i wg0 -s 10.66.66.0/24 -j ACCEPT"
+
+    - name: Ensure live iptables INPUT chain permits WireGuard UDP 51820 and wg0 before REJECT
+      ansible.builtin.shell: |
+        changed=0
+        reject_line="$(iptables -L INPUT --line-numbers | awk '/REJECT/ {print $1; exit}')"
+        if ! iptables -C INPUT -p udp -m udp --dport 51820 -j ACCEPT 2>/dev/null; then
+            iptables -I INPUT "${reject_line:-1}" -p udp -m udp --dport 51820 -j ACCEPT
+            changed=1
+        fi
+        reject_line="$(iptables -L INPUT --line-numbers | awk '/REJECT/ {print $1; exit}')"
+        if ! iptables -C INPUT -i wg0 -s 10.66.66.0/24 -j ACCEPT 2>/dev/null; then
+            iptables -I INPUT "${reject_line:-1}" -i wg0 -s 10.66.66.0/24 -j ACCEPT
+            changed=1
+        fi
+        exit "$((changed == 1 ? 0 : 0))"
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Ensure WireGuard wg-quick@wg0 service is enabled and running
+      ansible.builtin.systemd_service:
+        name: wg-quick@wg0
+        enabled: true
+        state: started
 
     - name: Disable SSH password authentication
       ansible.builtin.lineinfile:
@@ -129,6 +338,20 @@
     - name: Refresh geoblock rules
       ansible.builtin.command: /usr/local/sbin/marcelwalder-geoblock-update
       changed_when: true
+
+    - name: Restart node_exporter
+      ansible.builtin.service:
+        name: prometheus-node-exporter
+        state: restarted
+
+    - name: Refresh GoAccess report
+      ansible.builtin.command: /usr/local/sbin/marcelwalder-goaccess-update
+      changed_when: true
+
+    - name: Restart wg-quick@wg0
+      ansible.builtin.service:
+        name: wg-quick@wg0
+        state: restarted
 
     - name: Restart sshd
       ansible.builtin.service:

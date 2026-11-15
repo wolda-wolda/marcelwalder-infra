@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic GoAccess static Nginx log report refresh
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+AccuracySec=2min
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,10 @@
+[Unit]
+Description=Encrypted Restic offsite backup to OCI Object Storage
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/marcelwalder-restic-backup
+Nice=10
+IOSchedulingClass=idle
