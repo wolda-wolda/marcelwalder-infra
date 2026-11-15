@@ -76,60 +76,114 @@ wireModalDialog(contactDialog, openModalBtn);
 wireModalDialog(legalDialog, openLegalBtn);
 
 const siteHeader = document.querySelector(".site-header");
+const headerInner = document.querySelector(".header-inner");
 const navToggle = document.getElementById("nav-toggle");
-const desktopMediaQuery = window.matchMedia("(min-width: 56rem)");
+const siteMenu = document.getElementById("site-menu");
+const hasNativePopover = Object.hasOwn(HTMLElement.prototype, "popover");
 
-function setNavOpen(open) {
-  if (!siteHeader || !navToggle) return;
-  siteHeader.classList.toggle("nav-open", open);
-  navToggle.setAttribute("aria-expanded", String(open));
+let collapsedHeaderWidth = 0;
+
+function syncHeaderLayout(force = false) {
+  if (!siteHeader || !headerInner || !navToggle || !siteMenu) return;
+
+  const isCurrentlyWide = siteHeader.classList.contains("is-wide");
+  if (!force && !isCurrentlyWide && headerInner.clientWidth <= collapsedHeaderWidth) {
+    return;
+  }
+
+  const wasOpen =
+    !isCurrentlyWide &&
+    (hasNativePopover
+      ? siteMenu.matches(":popover-open")
+      : siteMenu.classList.contains("is-open"));
+
+  siteHeader.classList.add("is-measuring");
+  siteMenu.removeAttribute("popover");
+  siteMenu.classList.remove("is-open");
+  siteHeader.classList.add("is-wide");
+
+  const fits = headerInner.scrollWidth <= headerInner.clientWidth;
+
+  if (fits) {
+    collapsedHeaderWidth = 0;
+    navToggle.setAttribute("aria-expanded", "false");
+  } else {
+    siteHeader.classList.remove("is-wide");
+    collapsedHeaderWidth = headerInner.clientWidth;
+    if (hasNativePopover) {
+      siteMenu.setAttribute("popover", "auto");
+      if (wasOpen) {
+        siteMenu.showPopover();
+      }
+    } else if (wasOpen) {
+      siteMenu.classList.add("is-open");
+    }
+    navToggle.setAttribute("aria-expanded", String(wasOpen));
+  }
+
+  requestAnimationFrame(() => siteHeader.classList.remove("is-measuring"));
 }
 
-if (siteHeader && navToggle) {
-  navToggle.addEventListener("click", () => {
-    const isOpen = navToggle.getAttribute("aria-expanded") === "true";
-    setNavOpen(!isOpen);
-  });
+if (siteHeader && headerInner && navToggle && siteMenu) {
+  syncHeaderLayout(true);
 
-  document.addEventListener("click", (event) => {
-    if (
-      navToggle.getAttribute("aria-expanded") === "true" &&
-      !siteHeader.contains(event.target)
-    ) {
-      setNavOpen(false);
-    }
-  });
+  if (hasNativePopover) {
+    siteMenu.addEventListener("toggle", (event) => {
+      if (!siteHeader.classList.contains("is-wide")) {
+        navToggle.setAttribute("aria-expanded", String(event.newState === "open"));
+      }
+    });
+  } else {
+    navToggle.addEventListener("click", () => {
+      const nextOpen = !siteMenu.classList.contains("is-open");
+      siteMenu.classList.toggle("is-open", nextOpen);
+      navToggle.setAttribute("aria-expanded", String(nextOpen));
+    });
+  }
 
-  document.addEventListener("keydown", (event) => {
-    if (
-      event.key === "Escape" &&
-      navToggle.getAttribute("aria-expanded") === "true"
-    ) {
-      setNavOpen(false);
-      navToggle.focus();
-    }
-  });
+  if ("ResizeObserver" in window) {
+    let layoutRaf = 0;
+    const scheduleLayoutSync = () => {
+      if (!layoutRaf) {
+        layoutRaf = requestAnimationFrame(() => {
+          layoutRaf = 0;
+          syncHeaderLayout();
+        });
+      }
+    };
+    const layoutObserver = new ResizeObserver(scheduleLayoutSync);
+    layoutObserver.observe(headerInner);
+    layoutObserver.observe(siteMenu);
+  } else {
+    window.addEventListener("resize", () => syncHeaderLayout(true));
+  }
 
-  desktopMediaQuery.addEventListener("change", (event) => {
-    if (event.matches) {
-      setNavOpen(false);
-    }
-  });
+  document.fonts?.ready.then(() => syncHeaderLayout(true));
 }
 
 // Scrollspy aria-current synchronization + IntersectionObserver fallback
-const navLinks = Array.from(document.querySelectorAll(".site-nav a"));
+const navLinks = Array.from(document.querySelectorAll(".site-menu a"));
 const sections = Array.from(document.querySelectorAll("main section[id]"));
 
 for (const link of navLinks) {
-  link.addEventListener("click", () => setNavOpen(false));
+  link.addEventListener("click", () => {
+    if (!siteHeader || siteHeader.classList.contains("is-wide") || !siteMenu) {
+      return;
+    }
+    if (hasNativePopover && siteMenu.matches(":popover-open")) {
+      siteMenu.hidePopover();
+    } else if (!hasNativePopover) {
+      siteMenu.classList.remove("is-open");
+      navToggle?.setAttribute("aria-expanded", "false");
+    }
+  });
 }
 
 if (CSS.supports("scroll-target-group: auto")) {
   let rafId = 0;
   const syncAriaCurrent = () => {
     rafId = 0;
-    const currentLink = document.querySelector(".site-nav a:target-current");
+    const currentLink = document.querySelector(".site-menu a:target-current");
     for (const link of navLinks) {
       link.setAttribute("aria-current", link === currentLink ? "true" : "false");
     }
