@@ -4,7 +4,7 @@ umask 022
 
 OUT_DIR="/var/www/internal/goaccess"
 OUT_FILE="${OUT_DIR}/index.html"
-TMP_FILE="${OUT_DIR}/index.html.tmp"
+TMP_FILE="${OUT_DIR}/index.tmp.html"
 
 install -d -m 0755 "$OUT_DIR"
 
