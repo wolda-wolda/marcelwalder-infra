@@ -172,7 +172,7 @@
         for stack in mailserver snappymail; do
           dir="/opt/${stack}"
           if [ -f "${dir}/docker-compose.yml" ] && docker inspect "$stack" >/dev/null 2>&1; then
-            cfg="$(docker inspect --format '{{json .HostConfig.LogConfig.Config}}' "$stack")"
+            cfg="$(docker inspect --format '{% raw %}{{json .HostConfig.LogConfig.Config}}{% endraw %}' "$stack")"
             if [ "$cfg" = "{}" ] || [ "$cfg" = "null" ]; then
               docker compose -f "${dir}/docker-compose.yml" up -d --force-recreate
             fi
