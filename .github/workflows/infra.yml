@@ -85,7 +85,10 @@ jobs:
 
       - name: OpenTofu Plan (prod)
         working-directory: infra/live/prod
-        run: tofu plan -input=false -no-color | tee plan.txt
+        shell: bash
+        run: |
+          set -o pipefail
+          tofu plan -input=false -no-color | tee plan.txt
 
       - name: Post Plan Summary on PR
         if: github.event_name == 'pull_request'
@@ -192,7 +195,10 @@ jobs:
       - name: OpenTofu Plan (dns)
         if: steps.check_dns.outputs.enabled == 'true'
         working-directory: infra/live/dns
-        run: tofu plan -input=false -no-color | tee plan.txt
+        shell: bash
+        run: |
+          set -o pipefail
+          tofu plan -input=false -no-color | tee plan.txt
 
       - name: Post DNS Plan Summary on PR
         if: github.event_name == 'pull_request' && steps.check_dns.outputs.enabled == 'true'
