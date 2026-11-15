@@ -27,7 +27,7 @@
         <span class="brand-name">Marcel Walder</span>
       </a>
 
-      <nav class="site-nav" aria-label="Primary">
+      <nav id="primary-nav" class="site-nav" aria-label="Primary">
         <a href="#about">About</a>
         <a href="#experience">Experience</a>
         <a href="#projects">Projects</a>
@@ -49,13 +49,22 @@
           <span class="visually-hidden theme-label-dark">Switch to dark theme</span>
         </button>
 
-        <button type="button" id="print-cv" class="btn btn-secondary btn-compact">
+        <button type="button" id="print-cv" class="btn btn-secondary btn-compact" aria-label="Print or save CV as PDF" title="Print / PDF">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M6 9V2h12v7"></path>
             <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
             <rect width="12" height="8" x="6" y="14"></rect>
           </svg>
-          <span>Print / PDF</span>
+          <span class="btn-label">Print / PDF</span>
+        </button>
+
+        <button type="button" id="nav-toggle" class="icon-btn nav-toggle" aria-expanded="false" aria-controls="primary-nav" aria-label="Toggle navigation menu">
+          <svg class="icon icon-menu" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 6h16M4 12h16M4 18h16"></path>
+          </svg>
+          <svg class="icon icon-close" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12"></path>
+          </svg>
         </button>
       </div>
     </div>

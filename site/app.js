@@ -75,9 +75,55 @@ function wireModalDialog(dialog, trigger) {
 wireModalDialog(contactDialog, openModalBtn);
 wireModalDialog(legalDialog, openLegalBtn);
 
+const siteHeader = document.querySelector(".site-header");
+const navToggle = document.getElementById("nav-toggle");
+const desktopMediaQuery = window.matchMedia("(min-width: 56rem)");
+
+function setNavOpen(open) {
+  if (!siteHeader || !navToggle) return;
+  siteHeader.classList.toggle("nav-open", open);
+  navToggle.setAttribute("aria-expanded", String(open));
+}
+
+if (siteHeader && navToggle) {
+  navToggle.addEventListener("click", () => {
+    const isOpen = navToggle.getAttribute("aria-expanded") === "true";
+    setNavOpen(!isOpen);
+  });
+
+  document.addEventListener("click", (event) => {
+    if (
+      navToggle.getAttribute("aria-expanded") === "true" &&
+      !siteHeader.contains(event.target)
+    ) {
+      setNavOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (
+      event.key === "Escape" &&
+      navToggle.getAttribute("aria-expanded") === "true"
+    ) {
+      setNavOpen(false);
+      navToggle.focus();
+    }
+  });
+
+  desktopMediaQuery.addEventListener("change", (event) => {
+    if (event.matches) {
+      setNavOpen(false);
+    }
+  });
+}
+
 // Scrollspy aria-current synchronization + IntersectionObserver fallback
 const navLinks = Array.from(document.querySelectorAll(".site-nav a"));
 const sections = Array.from(document.querySelectorAll("main section[id]"));
+
+for (const link of navLinks) {
+  link.addEventListener("click", () => setNavOpen(false));
+}
 
 if (CSS.supports("scroll-target-group: auto")) {
   let rafId = 0;
