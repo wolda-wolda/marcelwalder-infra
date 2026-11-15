@@ -17,8 +17,14 @@ if [ "${#logs[@]}" -eq 0 ]; then
     exit 0
 fi
 
-if zcat -f "${logs[@]}" | grep -q .; then
-    zcat -f "${logs[@]}" | goaccess - \
+workdir="$(mktemp -d)"
+trap 'rm -rf "$workdir"' EXIT
+combined="${workdir}/access.combined.log"
+
+zcat -f "${logs[@]}" > "$combined"
+
+if [ -s "$combined" ]; then
+    goaccess "$combined" \
         --log-format=COMBINED \
         --no-global-config \
         --html-report-title="marcelwalder.eu Nginx Traffic & Bot Analytics" \
