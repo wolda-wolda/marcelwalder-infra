@@ -48,13 +48,28 @@ jobs:
 
       - name: Configure OCI API key and SSH public keys
         shell: bash
+        env:
+          OCI_PRIVATE_KEY_PEM: ${{ secrets.OCI_PRIVATE_KEY_PEM }}
+          VM_SSH_AUTHORIZED_KEYS_JSON: ${{ secrets.VM_SSH_AUTHORIZED_KEYS_JSON }}
         run: |
+          missing=0
+          for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_state_passphrase TF_VAR_compartment_id OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY_PEM VM_SSH_AUTHORIZED_KEYS_JSON; do
+            if [ -z "${!var}" ]; then
+              echo "ERROR: Missing required secret/env: $var (see README.md)." >&2
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
           mkdir -p ~/.oci
           chmod 700 ~/.oci
-          printf '%s\n' "${{ secrets.OCI_PRIVATE_KEY_PEM }}" > ~/.oci/oci_api_key.pem
+          printf '%s\n' "$OCI_PRIVATE_KEY_PEM" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
-          echo "OCI_PRIVATE_KEY_PATH=${HOME}/.oci/oci_api_key.pem" >> "$GITHUB_ENV"
-          echo "TF_VAR_ssh_authorized_keys=${{ secrets.VM_SSH_AUTHORIZED_KEYS_JSON }}" >> "$GITHUB_ENV"
+          {
+            echo "OCI_PRIVATE_KEY_PATH=${HOME}/.oci/oci_api_key.pem"
+            echo "TF_VAR_ssh_authorized_keys<<__EOF__"
+            printf '%s\n' "$VM_SSH_AUTHORIZED_KEYS_JSON"
+            echo "__EOF__"
+          } >> "$GITHUB_ENV"
 
       - name: Format check
         working-directory: infra
@@ -105,13 +120,28 @@ jobs:
 
       - name: Configure OCI API key and SSH public keys
         shell: bash
+        env:
+          OCI_PRIVATE_KEY_PEM: ${{ secrets.OCI_PRIVATE_KEY_PEM }}
+          VM_SSH_AUTHORIZED_KEYS_JSON: ${{ secrets.VM_SSH_AUTHORIZED_KEYS_JSON }}
         run: |
+          missing=0
+          for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY TF_VAR_state_passphrase TF_VAR_compartment_id OCI_TENANCY_OCID OCI_USER_OCID OCI_FINGERPRINT OCI_PRIVATE_KEY_PEM VM_SSH_AUTHORIZED_KEYS_JSON; do
+            if [ -z "${!var}" ]; then
+              echo "ERROR: Missing required secret/env: $var (see README.md)." >&2
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
           mkdir -p ~/.oci
           chmod 700 ~/.oci
-          printf '%s\n' "${{ secrets.OCI_PRIVATE_KEY_PEM }}" > ~/.oci/oci_api_key.pem
+          printf '%s\n' "$OCI_PRIVATE_KEY_PEM" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
-          echo "OCI_PRIVATE_KEY_PATH=${HOME}/.oci/oci_api_key.pem" >> "$GITHUB_ENV"
-          echo "TF_VAR_ssh_authorized_keys=${{ secrets.VM_SSH_AUTHORIZED_KEYS_JSON }}" >> "$GITHUB_ENV"
+          {
+            echo "OCI_PRIVATE_KEY_PATH=${HOME}/.oci/oci_api_key.pem"
+            echo "TF_VAR_ssh_authorized_keys<<__EOF__"
+            printf '%s\n' "$VM_SSH_AUTHORIZED_KEYS_JSON"
+            echo "__EOF__"
+          } >> "$GITHUB_ENV"
 
       - name: OpenTofu Init (prod)
         working-directory: infra/live/prod
