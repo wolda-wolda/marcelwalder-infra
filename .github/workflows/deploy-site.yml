@@ -113,3 +113,8 @@ jobs:
           scanner_code=$(curl -sS -o /dev/null -w "%{http_code}" -A "sqlmap/1.7" https://marcelwalder.eu/ || true)
           echo "Scanner UA returned HTTP $scanner_code"
           [ "$scanner_code" = "000" ]
+
+          robots_body=$(curl -fsS https://marcelwalder.eu/robots.txt)
+          echo "$robots_body" | grep -q "^User-agent: GPTBot"
+          echo "$robots_body" | grep -q "^Allow: /"
+          echo "Verified /robots.txt served cleanly."
