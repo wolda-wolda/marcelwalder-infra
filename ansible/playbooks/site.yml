@@ -86,13 +86,14 @@
           - "--chmod=D755,F644"
 
   handlers:
-    - name: Validate and reload nginx
+    - name: Run nginx config test
+      listen: "Validate and reload nginx"
       become: true
       ansible.builtin.command: nginx -t
       changed_when: false
-      notify: Reload nginx service
 
     - name: Reload nginx service
+      listen: "Validate and reload nginx"
       become: true
       ansible.builtin.service:
         name: nginx
