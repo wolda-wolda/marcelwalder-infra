@@ -1,0 +1,2 @@
+# Weekly automated updates for OS, Docker-Mailserver, SnappyMail, and Uptime Kuma (Sundays at 03:45 UTC)
+45 3 * * 0 root /opt/mailserver-update.sh > /dev/null 2>&1

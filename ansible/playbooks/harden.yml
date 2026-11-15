@@ -143,6 +143,45 @@
         enabled: true
         state: started
 
+    - name: Ensure Docker daemon configuration directory exists
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Configure Docker daemon JSON log rotation
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/monitoring/docker-daemon.json"
+        dest: /etc/docker/daemon.json
+        owner: root
+        group: root
+        mode: "0644"
+      register: docker_daemon_cfg
+
+    - name: Restart Docker daemon to apply new log rotation defaults
+      ansible.builtin.systemd_service:
+        name: docker
+        state: restarted
+      when: docker_daemon_cfg.changed
+
+    - name: Ensure existing mailserver and snappymail stacks adopt log rotation once
+      ansible.builtin.shell: |
+        set -euo pipefail
+        for stack in mailserver snappymail; do
+          dir="/opt/${stack}"
+          if [ -f "${dir}/docker-compose.yml" ] && docker inspect "$stack" >/dev/null 2>&1; then
+            cfg="$(docker inspect --format '{{json .HostConfig.LogConfig.Config}}' "$stack")"
+            if [ "$cfg" = "{}" ] || [ "$cfg" = "null" ]; then
+              docker compose -f "${dir}/docker-compose.yml" up -d --force-recreate
+            fi
+          fi
+        done
+      args:
+        executable: /bin/bash
+      changed_when: false
+
     - name: Ensure Uptime Kuma directories exist
       ansible.builtin.file:
         path: "{{ item.path }}"
@@ -327,6 +366,36 @@
         name: wg-quick@wg0
         enabled: true
         state: started
+
+    - name: Install adapted weekly automated stack patching script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/mailserver-update.sh"
+        dest: /opt/mailserver-update.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Ensure /usr/local/bin/mailserver-update symlink exists
+      ansible.builtin.file:
+        src: /opt/mailserver-update.sh
+        dest: /usr/local/bin/mailserver-update
+        state: link
+
+    - name: Install weekly automated patching cron schedule
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/mailserver-update.cron"
+        dest: /etc/cron.d/mailserver-update
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install logrotate policy for mailserver-update.log
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/mailserver-update.logrotate"
+        dest: /etc/logrotate.d/mailserver-update
+        owner: root
+        group: root
+        mode: "0644"
 
     - name: Disable SSH password authentication
       ansible.builtin.lineinfile:
