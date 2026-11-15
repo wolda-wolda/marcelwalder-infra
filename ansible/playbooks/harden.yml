@@ -161,6 +161,17 @@
         owner: root
         group: root
         mode: "0644"
+      register: uptime_kuma_compose
+
+    - name: Back up data and stop Uptime Kuma before image upgrade
+      ansible.builtin.shell: |
+        install -d -m 0700 /var/backups
+        tar -czf /var/backups/uptime-kuma-pre-upgrade.tar.gz -C /opt/uptime-kuma data
+        docker compose -f /opt/uptime-kuma/compose.yml down
+        docker compose -f /opt/uptime-kuma/compose.yml pull
+      args:
+        executable: /bin/bash
+      when: uptime_kuma_compose.changed
 
     - name: Ensure Uptime Kuma container is running
       ansible.builtin.command: docker compose -f /opt/uptime-kuma/compose.yml up -d --remove-orphans
@@ -176,8 +187,8 @@
         status_code: [200, 302]
         follow_redirects: none
       register: kuma_health
-      retries: 15
-      delay: 4
+      retries: 20
+      delay: 5
       until: kuma_health.status is defined and kuma_health.status in [200, 302]
 
     - name: Install GoAccess static report update script
