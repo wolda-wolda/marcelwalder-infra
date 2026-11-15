@@ -39,6 +39,12 @@ locals {
       content   = local.mail_ip
       ttl       = 300
     }
+    status_a = {
+      subdomain = "status"
+      type      = "A"
+      content   = local.mail_ip
+      ttl       = 300
+    }
     mta_sts_cname = {
       subdomain = "mta-sts"
       type      = "CNAME"

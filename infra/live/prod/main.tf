@@ -7,7 +7,27 @@ locals {
     { description = "SMTPS", protocol = "6", source = "0.0.0.0/0", tcp_min = 465, tcp_max = 465 },
     { description = "Submission", protocol = "6", source = "0.0.0.0/0", tcp_min = 587, tcp_max = 587 },
     { description = "IMAPS", protocol = "6", source = "0.0.0.0/0", tcp_min = 993, tcp_max = 993 },
+    { description = "WireGuard Admin VPN", protocol = "17", source = "0.0.0.0/0", udp_min = 51820, udp_max = 51820 },
   ]
+}
+
+data "oci_objectstorage_namespace" "this" {
+  compartment_id = var.compartment_id
+}
+
+resource "oci_objectstorage_bucket" "backups" {
+  compartment_id        = var.compartment_id
+  namespace             = data.oci_objectstorage_namespace.this.namespace
+  name                  = "backups-marcelwalder-prod"
+  access_type           = "NoPublicAccess"
+  storage_tier          = "Standard"
+  auto_tiering          = "Disabled"
+  object_events_enabled = false
+  versioning            = "Disabled"
+
+  lifecycle {
+    ignore_changes = [defined_tags]
+  }
 }
 
 module "network" {

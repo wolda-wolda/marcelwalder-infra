@@ -22,3 +22,13 @@ output "instance_public_ips" {
   description = "Map of VM instance keys to public IP addresses (consumed by DNS stack and Ansible)."
   value       = module.compute.public_ips
 }
+
+output "objectstorage_namespace" {
+  description = "OCI Object Storage namespace for the compartment."
+  value       = data.oci_objectstorage_namespace.this.namespace
+}
+
+output "backup_bucket_name" {
+  description = "OCI Object Storage bucket used for encrypted Restic offsite backups."
+  value       = oci_objectstorage_bucket.backups.name
+}
