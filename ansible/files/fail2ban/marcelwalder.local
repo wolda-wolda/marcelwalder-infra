@@ -1,0 +1,38 @@
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1
+bantime = 1h
+findtime = 10m
+maxretry = 5
+banaction = iptables-multiport
+backend = auto
+
+[sshd]
+enabled = true
+port = ssh
+mode = aggressive
+maxretry = 5
+
+[nginx-limit-req]
+enabled = true
+port = http,https
+logpath = /var/log/nginx/error.log
+findtime = 2m
+maxretry = 10
+bantime = 1h
+
+[nginx-botsearch]
+enabled = true
+port = http,https
+logpath = /var/log/nginx/access.log
+findtime = 5m
+maxretry = 8
+bantime = 2h
+
+[nginx-probe-drop]
+enabled = true
+port = http,https
+filter = nginx-probe-drop
+logpath = /var/log/nginx/access.log
+findtime = 2m
+maxretry = 8
+bantime = 2h

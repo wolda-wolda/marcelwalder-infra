@@ -9,6 +9,7 @@
 
   tasks:
     - name: Ensure target web root directory exists
+      become: true
       ansible.builtin.file:
         path: "{{ site_dest }}"
         state: directory
@@ -17,6 +18,7 @@
         mode: "0755"
 
     - name: Ensure Nginx snippets directory exists
+      become: true
       ansible.builtin.file:
         path: /etc/nginx/snippets
         state: directory
@@ -25,12 +27,51 @@
         mode: "0755"
 
     - name: Install Nginx security headers snippet
+      become: true
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/nginx/marcelwalder-security-headers.conf"
         dest: /etc/nginx/snippets/marcelwalder-security-headers.conf
         owner: root
         group: root
         mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Install Nginx bot protection and probe filter snippet
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-bot-protection.conf"
+        dest: /etc/nginx/snippets/marcelwalder-bot-protection.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Install Nginx HTTP rate-limit and scanner map config
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-rate-limit.conf"
+        dest: /etc/nginx/conf.d/marcelwalder-rate-limit.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Install marcelwalder.eu Nginx virtual host config
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/marcelwalder.eu.conf"
+        dest: /etc/nginx/sites-available/marcelwalder.eu
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Ensure marcelwalder.eu Nginx site is enabled
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/marcelwalder.eu
+        dest: /etc/nginx/sites-enabled/marcelwalder.eu
+        state: link
       notify: Validate and reload nginx
 
     - name: Sync static site bundle to web root
@@ -46,11 +87,13 @@
 
   handlers:
     - name: Validate and reload nginx
+      become: true
       ansible.builtin.command: nginx -t
       changed_when: false
       notify: Reload nginx service
 
     - name: Reload nginx service
+      become: true
       ansible.builtin.service:
         name: nginx
         state: reloaded

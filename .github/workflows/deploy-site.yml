@@ -86,10 +86,26 @@ jobs:
         run: |
           ansible-playbook playbooks/site.yml --private-key ~/.ssh/id_deploy
 
-      - name: Smoke test live HTTPS endpoint and CSP header
+      - name: Run Ansible host hardening playbook
+        working-directory: ansible
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "True"
+        run: |
+          ansible-playbook playbooks/harden.yml -e target_hosts=web_hosts --private-key ~/.ssh/id_deploy
+
+      - name: Smoke test live HTTPS endpoint, CSP header, and bot protections
         shell: bash
         run: |
           headers=$(curl -fsS -I https://marcelwalder.eu/)
           echo "$headers"
           echo "$headers" | grep -qi "^content-security-policy:"
           echo "$headers" | grep -qi "^strict-transport-security:"
+
+          post_code=$(curl -sS -o /dev/null -w "%{http_code}" -X POST https://marcelwalder.eu/)
+          echo "POST / returned HTTP $post_code"
+          [ "$post_code" = "405" ]
+
+          # Nginx returns 444 (closes connection without response; curl exit 52/92/000) for exploit probes
+          probe_code=$(curl -sS -o /dev/null -w "%{http_code}" https://marcelwalder.eu/.env || true)
+          echo "GET /.env returned HTTP $probe_code"
+          [ "$probe_code" != "200" ]
