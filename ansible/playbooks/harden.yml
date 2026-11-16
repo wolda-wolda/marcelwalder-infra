@@ -248,6 +248,48 @@
         mode: "0600"
       when: mailserver_env.stat.exists
 
+    - name: Disable unused POP3 listener in mailserver.env
+      ansible.builtin.lineinfile:
+        path: /opt/mailserver/mailserver.env
+        regexp: '^#?ENABLE_POP3='
+        line: "ENABLE_POP3=0"
+      when: mailserver_env.stat.exists
+
+    - name: Check whether /opt/mailserver/config directory exists
+      ansible.builtin.stat:
+        path: /opt/mailserver/config
+      register: mailserver_config_dir
+
+    - name: Restrict /opt/mailserver/config directory permissions
+      ansible.builtin.file:
+        path: /opt/mailserver/config
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      when: mailserver_config_dir.stat.exists
+
+    - name: Check whether /opt/mailserver/config/postfix-accounts.cf exists
+      ansible.builtin.stat:
+        path: /opt/mailserver/config/postfix-accounts.cf
+      register: postfix_accounts_cf
+
+    - name: Restrict /opt/mailserver/config/postfix-accounts.cf permissions
+      ansible.builtin.file:
+        path: /opt/mailserver/config/postfix-accounts.cf
+        owner: root
+        group: root
+        mode: "0600"
+      when: postfix_accounts_cf.stat.exists
+
+    - name: Ensure local /backup directory exists with strict root-only permissions
+      ansible.builtin.file:
+        path: /backup
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
     - name: Check whether SnappyMail configuration exists
       ansible.builtin.stat:
         path: /opt/snappymail/volume/_data_/_default_/configs/application.ini
@@ -450,6 +492,38 @@
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/maintenance/mailserver-update.logrotate"
         dest: /etc/logrotate.d/mailserver-update
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install hardened quota-watchdog script as root-owned
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/quota-watchdog.sh"
+        dest: /opt/quota-watchdog.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install quota-watchdog hourly cron schedule
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/quota-watchdog.cron"
+        dest: /etc/cron.d/quota-watchdog
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Install hardened local mailserver backup script
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/mailserver-backup.sh"
+        dest: /opt/mailserver-backup.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install local mailserver backup cron schedule
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/mailserver-backup.cron"
+        dest: /etc/cron.d/mailserver-backup
         owner: root
         group: root
         mode: "0644"

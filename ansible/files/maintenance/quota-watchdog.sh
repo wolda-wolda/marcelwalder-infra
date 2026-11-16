@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+RECIPIENT="marcelwalder12@gmail.com"
+RELAY_LIMIT=3100
+RELAY_70=2170
+RELAY_90=2790
+
+send_alert() {
+    local subject="$1"
+    local body="$2"
+    docker exec -i mailserver sendmail -f info@marcelwalder.eu "$RECIPIENT" <<MAIL_EOF
+From: info@marcelwalder.eu
+To: $RECIPIENT
+Subject: $subject
+Date: $(date -R)
+
+$body
+MAIL_EOF
+}
+
+# 1. Monthly Relay Volume Check
+CURRENT_MONTH=$(date +"%b")
+LOG_FILE="/opt/mailserver/mail-logs/mail.log"
+
+SENT_COUNT=0
+if [ -f "$LOG_FILE" ]; then
+    CNT=$(grep "$CURRENT_MONTH" "$LOG_FILE" 2>/dev/null | grep -c "relay=smtp.email.eu-frankfurt-1.oci.oraclecloud.com.*status=sent" || true)
+    if [ -n "$CNT" ]; then
+        SENT_COUNT=$CNT
+    fi
+fi
+
+# 2. Disk Usage Check (50 GB Boot Volume)
+DISK_PERCENT=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+
+# 3. Local /backup Directory Size Check (Limit 5 GB)
+BACKUP_SIZE_MB=0
+if [ -d "/backup" ]; then
+    BACKUP_SIZE_MB=$(du -sm /backup 2>/dev/null | awk '{print $1}')
+fi
+
+# 4. Memory Usage Check for OCI Always Free Idle Reclaim Rule (Threshold 20%)
+MEM_USED_MB=$(free -m | awk '/Mem:/ {print $3}')
+MEM_TOTAL_MB=$(free -m | awk '/Mem:/ {print $2}')
+MEM_PERCENT=$(( 100 * MEM_USED_MB / MEM_TOTAL_MB ))
+IDLE_STATE_FILE="/opt/mailserver/idle_mem_hours.count"
+
+echo "=== Watchdog Run: $(date) ==="
+echo "Monthly Relay Emails Sent: $SENT_COUNT / $RELAY_LIMIT"
+echo "Root Disk Usage: ${DISK_PERCENT}%"
+echo "Local /backup Size: ${BACKUP_SIZE_MB} MB"
+echo "Memory Usage: ${MEM_PERCENT}% (${MEM_USED_MB}MB / ${MEM_TOTAL_MB}MB)"
+
+# Relay alerts
+if [ "$SENT_COUNT" -ge "$RELAY_90" ]; then
+    send_alert "CRITICAL: OCI Email Relay at 90% ($SENT_COUNT / $RELAY_LIMIT)" "You have sent $SENT_COUNT emails this month out of your 3,100 free allowance."
+elif [ "$SENT_COUNT" -ge "$RELAY_70" ]; then
+    send_alert "WARNING: OCI Email Relay at 70% ($SENT_COUNT / $RELAY_LIMIT)" "You have sent $SENT_COUNT emails this month out of your 3,100 free allowance."
+fi
+
+# Disk alerts
+if [ "$DISK_PERCENT" -ge 90 ]; then
+    send_alert "CRITICAL: Mail Server Disk at ${DISK_PERCENT}%" "Your 50 GB boot volume is at ${DISK_PERCENT}% capacity."
+elif [ "$DISK_PERCENT" -ge 70 ]; then
+    send_alert "WARNING: Mail Server Disk at ${DISK_PERCENT}%" "Your 50 GB boot volume is at ${DISK_PERCENT}% capacity."
+fi
+
+# Local Backup alerts (5 GB threshold = ~140 daily archives)
+if [ "$BACKUP_SIZE_MB" -ge 4500 ]; then
+    send_alert "CRITICAL: Local Mail Backups Exceeding 4.5 GB" "Your local /backup directory is using ${BACKUP_SIZE_MB} MB."
+elif [ "$BACKUP_SIZE_MB" -ge 3500 ]; then
+    send_alert "WARNING: Local Mail Backups Exceeding 3.5 GB" "Your local /backup directory is using ${BACKUP_SIZE_MB} MB."
+fi
+
+# Memory Idle Reclaim alerts
+if [ "$MEM_PERCENT" -lt 20 ]; then
+    PREV=0
+    if [ -f "$IDLE_STATE_FILE" ]; then
+        PREV=$(cat "$IDLE_STATE_FILE")
+    fi
+    CURRENT=$(( PREV + 1 ))
+    echo "$CURRENT" > "$IDLE_STATE_FILE"
+    echo "Memory below 20% threshold! Count: $CURRENT consecutive hours"
+
+    if [ "$CURRENT" -ge 6 ]; then
+        send_alert "CRITICAL: Mail Server Memory Below 20% for ${CURRENT}h (Reclaim Risk)" "Warning: Memory utilization on your Always Free instance has been ${MEM_PERCENT}% for ${CURRENT} consecutive hours. Oracle Always Free VMs are subject to reclamation if CPU, Network, and Memory all remain under 20% for 7 days. Please check your VM and verify Docker-Mailserver is running."
+    fi
+else
+    echo "0" > "$IDLE_STATE_FILE"
+fi
