@@ -235,6 +235,31 @@
         path: /var/backups/uptime-kuma-pre-upgrade.tar.gz
         state: absent
 
+    - name: Check whether mailserver.env exists
+      ansible.builtin.stat:
+        path: /opt/mailserver/mailserver.env
+      register: mailserver_env
+
+    - name: Restrict /opt/mailserver/mailserver.env permissions
+      ansible.builtin.file:
+        path: /opt/mailserver/mailserver.env
+        owner: root
+        group: root
+        mode: "0600"
+      when: mailserver_env.stat.exists
+
+    - name: Check whether SnappyMail configuration exists
+      ansible.builtin.stat:
+        path: /opt/snappymail/volume/_data_/_default_/configs/application.ini
+      register: snappymail_ini
+
+    - name: Keep SnappyMail web admin panel disabled by default
+      ansible.builtin.lineinfile:
+        path: /opt/snappymail/volume/_data_/_default_/configs/application.ini
+        regexp: '^\s*allow_admin_panel\s*='
+        line: "allow_admin_panel = Off"
+      when: snappymail_ini.stat.exists
+
     - name: Install GoAccess static report update script
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/monitoring/goaccess-update.sh"
@@ -361,6 +386,38 @@
         executable: /bin/bash
       changed_when: false
 
+    - name: Ensure /etc/iptables directory exists
+      ansible.builtin.file:
+        path: /etc/iptables
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install IPv6 iptables baseline policy
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/firewall/rules.v6"
+        dest: /etc/iptables/rules.v6
+        owner: root
+        group: root
+        mode: "0644"
+      register: ip6tables_rules
+
+    - name: Apply IPv6 INPUT firewall rules without flushing live Docker FORWARD chains
+      ansible.builtin.shell: |
+        set -euo pipefail
+        ip6tables-restore --test < /etc/iptables/rules.v6
+        ip6tables -F INPUT
+        ip6tables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+        ip6tables -A INPUT -i lo -j ACCEPT
+        ip6tables -A INPUT -p ipv6-icmp -j ACCEPT
+        ip6tables -A INPUT -p tcp -m multiport --dports 22,25,80,443,465,587,993 -j ACCEPT
+        ip6tables -A INPUT -p udp -m udp --dport 51820 -j ACCEPT
+        ip6tables -A INPUT -j REJECT --reject-with icmp6-adm-prohibited
+      args:
+        executable: /bin/bash
+      when: ip6tables_rules.changed
+
     - name: Ensure WireGuard wg-quick@wg0 service is enabled and running
       ansible.builtin.systemd_service:
         name: wg-quick@wg0
@@ -397,12 +454,21 @@
         group: root
         mode: "0644"
 
-    - name: Disable SSH password authentication
+    - name: Install hardened OpenSSH drop-in configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/ssh/50-marcelwalder-hardening.conf"
+        dest: /etc/ssh/sshd_config.d/50-marcelwalder-hardening.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and restart sshd
+
+    - name: Disable SSH password authentication in main sshd_config
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
         regexp: "^#?PasswordAuthentication"
         line: "PasswordAuthentication no"
-      notify: Restart sshd
+      notify: Validate and restart sshd
 
     - name: Stop and mask unused rpcbind services
       ansible.builtin.systemd_service:
@@ -449,7 +515,13 @@
         name: wg-quick@wg0
         state: restarted
 
-    - name: Restart sshd
+    - name: Run sshd config test
+      listen: "Validate and restart sshd"
+      ansible.builtin.command: sshd -t
+      changed_when: false
+
+    - name: Restart sshd service
+      listen: "Validate and restart sshd"
       ansible.builtin.service:
         name: ssh
         state: restarted

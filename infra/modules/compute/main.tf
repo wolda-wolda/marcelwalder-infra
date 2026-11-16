@@ -13,6 +13,10 @@ resource "oci_core_instance" "this" {
     memory_in_gbs = each.value.memory_in_gbs
   }
 
+  instance_options {
+    are_legacy_imds_endpoints_disabled = true
+  }
+
   create_vnic_details {
     subnet_id        = each.value.subnet_id
     display_name     = each.value.display_name

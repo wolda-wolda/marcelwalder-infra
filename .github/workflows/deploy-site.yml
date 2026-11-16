@@ -12,6 +12,7 @@ on:
     paths:
       - "site/**"
       - "ansible/**"
+      - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 
 concurrency:
@@ -28,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Check for external asset leaks or inline scripts
         shell: bash
@@ -52,7 +53,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install Ansible
         run: |
@@ -138,3 +139,22 @@ jobs:
           socket_code=$(curl -sS -o /dev/null -w "%{http_code}" "https://status.marcelwalder.eu/socket.io/?EIO=4&transport=polling")
           echo "GET https://status.marcelwalder.eu/socket.io/ returned HTTP $socket_code"
           [ "$socket_code" = "403" ]
+
+          mail_headers=$(curl -fsS -I https://mail.marcelwalder.eu/)
+          echo "$mail_headers" | grep -qi "^strict-transport-security:"
+
+          mail_admin_code=$(curl -sS -o /dev/null -w "%{http_code}" "https://mail.marcelwalder.eu/?admin")
+          echo "GET https://mail.marcelwalder.eu/?admin returned HTTP $mail_admin_code"
+          [ "$mail_admin_code" = "403" ]
+
+          mta_headers=$(curl -fsS -I https://mta-sts.marcelwalder.eu/.well-known/mta-sts.txt)
+          echo "$mta_headers" | grep -qi "^strict-transport-security:"
+
+          server_ip=$(getent ahosts marcelwalder.eu | awk '{print $1; exit}')
+          ip_http_code=$(curl -sS -o /dev/null -w "%{http_code}" "http://${server_ip}/" || true)
+          echo "Direct IP HTTP returned HTTP $ip_http_code"
+          [ "$ip_http_code" = "000" ]
+
+          ip_https_code=$(curl -skS -o /dev/null -w "%{http_code}" "https://${server_ip}/" || true)
+          echo "Direct IP HTTPS returned HTTP $ip_https_code"
+          [ "$ip_https_code" = "000" ]

@@ -23,7 +23,7 @@ resource "oci_objectstorage_bucket" "backups" {
   storage_tier          = "Standard"
   auto_tiering          = "Disabled"
   object_events_enabled = false
-  versioning            = "Disabled"
+  versioning            = "Enabled"
 
   lifecycle {
     ignore_changes = [defined_tags]

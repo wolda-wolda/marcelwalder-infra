@@ -46,6 +46,22 @@
       ansible.builtin.command: sysctl -p /etc/sysctl.d/99-marcelwalder-wireguard.conf
       when: wireguard_sysctl.changed
 
+    - name: Disable Nginx server version tokens in main configuration
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/nginx/nginx.conf
+        regexp: '^\s*#?\s*server_tokens\s+'
+        line: "\tserver_tokens off;"
+      notify: Validate and reload nginx
+
+    - name: Enforce TLSv1.2 and TLSv1.3 only in main Nginx configuration
+      become: true
+      ansible.builtin.lineinfile:
+        path: /etc/nginx/nginx.conf
+        regexp: '^\s*ssl_protocols\s+'
+        line: "\tssl_protocols TLSv1.2 TLSv1.3;"
+      notify: Validate and reload nginx
+
     - name: Ensure placeholder Nginx geo CIDR file exists before config test
       become: true
       ansible.builtin.copy:
@@ -105,6 +121,24 @@
         owner: root
         group: root
         mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Install default catch-all Nginx virtual host config
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/00-default-catchall.conf"
+        dest: /etc/nginx/sites-available/00-default-catchall
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
+    - name: Ensure default catch-all Nginx site is enabled
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/00-default-catchall
+        dest: /etc/nginx/sites-enabled/00-default-catchall
+        state: link
       notify: Validate and reload nginx
 
     - name: Install marcelwalder.eu Nginx virtual host config
@@ -178,6 +212,58 @@
         src: /etc/nginx/sites-available/status.marcelwalder.eu
         dest: /etc/nginx/sites-enabled/status.marcelwalder.eu
         state: link
+      notify: Validate and reload nginx
+
+    - name: Check whether mail.marcelwalder.eu TLS certificate exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/letsencrypt/live/mail.marcelwalder.eu-0001/fullchain.pem
+      register: mail_cert
+
+    - name: Install mail.marcelwalder.eu Nginx reverse-proxy virtual host config
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/mail.marcelwalder.eu.conf"
+        dest: /etc/nginx/sites-available/mail
+        owner: root
+        group: root
+        mode: "0644"
+      when: mail_cert.stat.exists
+      notify: Validate and reload nginx
+
+    - name: Ensure mail.marcelwalder.eu Nginx site is enabled
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/mail
+        dest: /etc/nginx/sites-enabled/mail
+        state: link
+      when: mail_cert.stat.exists
+      notify: Validate and reload nginx
+
+    - name: Check whether mta-sts.marcelwalder.eu TLS certificate exists
+      become: true
+      ansible.builtin.stat:
+        path: /etc/letsencrypt/live/mta-sts.marcelwalder.eu/fullchain.pem
+      register: mta_sts_cert
+
+    - name: Install mta-sts.marcelwalder.eu Nginx virtual host config
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/mta-sts.marcelwalder.eu.conf"
+        dest: /etc/nginx/sites-available/mta-sts
+        owner: root
+        group: root
+        mode: "0644"
+      when: mta_sts_cert.stat.exists
+      notify: Validate and reload nginx
+
+    - name: Ensure mta-sts.marcelwalder.eu Nginx site is enabled
+      become: true
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/mta-sts
+        dest: /etc/nginx/sites-enabled/mta-sts
+        state: link
+      when: mta_sts_cert.stat.exists
       notify: Validate and reload nginx
 
     - name: Install internal-only GoAccess & node_exporter Nginx vhost
