@@ -51,6 +51,12 @@ locals {
       content   = "10.66.66.1"
       ttl       = 600
     }
+    kuma_a = {
+      subdomain = "kuma"
+      type      = "A"
+      content   = "10.66.66.1"
+      ttl       = 600
+    }
     mta_sts_cname = {
       subdomain = "mta-sts"
       type      = "CNAME"

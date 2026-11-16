@@ -127,6 +127,14 @@ jobs:
           echo "$sec_body" | grep -q "^Contact: mailto:info@marcelwalder.eu"
           echo "Verified /.well-known/security.txt served cleanly."
 
-          status_code=$(curl -sS -o /dev/null -w "%{http_code}" https://status.marcelwalder.eu/)
-          echo "GET https://status.marcelwalder.eu/ returned HTTP $status_code"
-          [[ "$status_code" =~ ^(200|302)$ ]]
+          status_code=$(curl -sS -o /dev/null -w "%{http_code}" https://status.marcelwalder.eu/status/prod)
+          echo "GET https://status.marcelwalder.eu/status/prod returned HTTP $status_code"
+          [ "$status_code" = "200" ]
+
+          dashboard_code=$(curl -sS -o /dev/null -w "%{http_code}" https://status.marcelwalder.eu/dashboard)
+          echo "GET https://status.marcelwalder.eu/dashboard returned HTTP $dashboard_code"
+          [ "$dashboard_code" = "403" ]
+
+          socket_code=$(curl -sS -o /dev/null -w "%{http_code}" "https://status.marcelwalder.eu/socket.io/?EIO=4&transport=polling")
+          echo "GET https://status.marcelwalder.eu/socket.io/ returned HTTP $socket_code"
+          [ "$socket_code" = "403" ]

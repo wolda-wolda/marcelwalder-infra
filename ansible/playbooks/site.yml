@@ -87,6 +87,16 @@
         mode: "0644"
       notify: Validate and reload nginx
 
+    - name: Install Nginx Uptime Kuma proxy snippet
+      become: true
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-uptime-kuma-proxy.conf"
+        dest: /etc/nginx/snippets/marcelwalder-uptime-kuma-proxy.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Validate and reload nginx
+
     - name: Install Nginx HTTP rate-limit and scanner map config
       become: true
       ansible.builtin.copy:
