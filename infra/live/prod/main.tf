@@ -85,7 +85,16 @@ module "network" {
     }
   }
 
-  nsgs = var.nsgs
+  nsgs = merge(
+    {
+      mail = {
+        display_name     = "Mail-Server-NSG"
+        ingress_rules    = local.mail_ingress_rules
+        egress_allow_all = true
+      }
+    },
+    var.nsgs
+  )
 }
 
 module "compute" {
@@ -130,6 +139,52 @@ resource "oci_objectstorage_bucket" "tfstate" {
   lifecycle {
     prevent_destroy = true
     ignore_changes  = [defined_tags]
+  }
+}
+
+resource "oci_objectstorage_object_lifecycle_policy" "backups" {
+  namespace = data.oci_objectstorage_namespace.this.namespace
+  bucket    = oci_objectstorage_bucket.backups.name
+
+  rules {
+    name        = "expire-previous-versions"
+    action      = "DELETE"
+    target      = "previous-object-versions"
+    time_amount = 30
+    time_unit   = "DAYS"
+    is_enabled  = true
+  }
+
+  rules {
+    name        = "abort-stale-multipart-uploads"
+    action      = "ABORT"
+    target      = "multipart-uploads"
+    time_amount = 7
+    time_unit   = "DAYS"
+    is_enabled  = true
+  }
+}
+
+resource "oci_objectstorage_object_lifecycle_policy" "tfstate" {
+  namespace = data.oci_objectstorage_namespace.this.namespace
+  bucket    = oci_objectstorage_bucket.tfstate.name
+
+  rules {
+    name        = "expire-previous-state-versions"
+    action      = "DELETE"
+    target      = "previous-object-versions"
+    time_amount = 30
+    time_unit   = "DAYS"
+    is_enabled  = true
+  }
+
+  rules {
+    name        = "abort-stale-multipart-uploads"
+    action      = "ABORT"
+    target      = "multipart-uploads"
+    time_amount = 7
+    time_unit   = "DAYS"
+    is_enabled  = true
   }
 }
 
@@ -210,10 +265,14 @@ resource "oci_events_rule" "mail_backup_notification" {
   compartment_id = var.compartment_id
   display_name   = "Mail-Server-Backup-Notification"
   is_enabled     = true
-  condition      = "{\"eventType\":[\"com.oraclecloud.blockstorage.createbootvolumebackup.end\"]}"
+
+  condition_details {
+    event_types = ["com.oraclecloud.blockstorage.createbootvolumebackup.end"]
+    data        = jsonencode({})
+  }
 
   actions {
-    actions {
+    action {
       action_type = "ONS"
       description = "Notify when mail server boot volume backup finishes"
       is_enabled  = true
@@ -319,5 +378,82 @@ resource "oci_identity_policy" "tenant_admin" {
   lifecycle {
     prevent_destroy = true
     ignore_changes  = [defined_tags]
+  }
+}
+
+data "oci_identity_domains" "default" {
+  compartment_id = var.compartment_id
+  display_name   = "Default"
+}
+
+resource "oci_identity_domains_user" "opentofu_ci" {
+  idcs_endpoint = data.oci_identity_domains.default.domains[0].url
+  schemas       = ["urn:ietf:params:scim:schemas:core:2.0:User"]
+  user_name     = "opentofu-ci"
+  display_name  = "OpenTofu CI Automation"
+  description   = "Least-privilege service account for GitHub Actions OpenTofu CI/CD"
+  active        = true
+
+  name {
+    given_name  = "OpenTofu"
+    family_name = "CI"
+  }
+
+  emails {
+    type    = "work"
+    value   = var.alert_email
+    primary = true
+  }
+
+  emails {
+    type  = "recovery"
+    value = var.alert_email
+  }
+
+  lifecycle {
+    ignore_changes = [urnietfparamsscimschemasoracleidcsextension_oci_tags]
+  }
+}
+
+resource "oci_identity_domains_group" "opentofu_ci" {
+  idcs_endpoint = data.oci_identity_domains.default.domains[0].url
+  schemas       = ["urn:ietf:params:scim:schemas:core:2.0:Group"]
+  display_name  = "opentofu-ci"
+
+  members {
+    type  = "User"
+    value = oci_identity_domains_user.opentofu_ci.id
+    ocid  = oci_identity_domains_user.opentofu_ci.ocid
+  }
+
+  lifecycle {
+    ignore_changes = [urnietfparamsscimschemasoracleidcsextension_oci_tags]
+  }
+}
+
+resource "oci_identity_policy" "opentofu_ci" {
+  compartment_id = var.compartment_id
+  name           = "OpenTofu-CI-Least-Privilege"
+  description    = "Least-privilege permissions for GitHub Actions OpenTofu CI/CD"
+  statements = [
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage virtual-network-family IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage instance-family IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage volume-family IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage objectstorage-namespaces IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage buckets IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage objects IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage email-family IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage ons-family IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage cloudevents-rules IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage alarms IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to manage usage-budgets IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to read users IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to read groups IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to read policies IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to read domains IN TENANCY"
+  ]
+
+  lifecycle {
+    ignore_changes = [defined_tags]
   }
 }

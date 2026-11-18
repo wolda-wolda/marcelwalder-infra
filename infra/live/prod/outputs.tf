@@ -57,3 +57,8 @@ output "budget_id" {
   description = "OCI Zero-Spend-Guard budget OCID."
   value       = oci_budget_budget.zero_spend_guard.id
 }
+
+output "opentofu_ci_user_ocid" {
+  description = "OCID of the dedicated least-privilege opentofu-ci IAM user for future GitHub Secrets rotation."
+  value       = oci_identity_domains_user.opentofu_ci.ocid
+}

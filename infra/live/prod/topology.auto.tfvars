@@ -10,6 +10,7 @@ instances = {
     subnet_key              = "public"
     hostname_label          = "mail-server"
     private_ip              = "10.0.1.180"
+    nsg_keys                = ["mail"]
     vnic_assign_public_ip   = true # Preserves console-created VNIC flag on imported Mail-Server
     reserved_public_ip_name = "Mail-Reserved-IP"
   }

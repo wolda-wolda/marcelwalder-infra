@@ -11,6 +11,8 @@ on:
     paths:
       - "infra/**"
       - ".github/workflows/infra.yml"
+  schedule:
+    - cron: "0 5 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -76,6 +78,13 @@ jobs:
         working-directory: infra
         run: tofu fmt -check -recursive
 
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6
+
+      - name: Run TFLint
+        working-directory: infra
+        run: tflint --recursive
+
       - name: OpenTofu Init (prod)
         working-directory: infra/live/prod
         run: tofu init -input=false
@@ -89,7 +98,20 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          tofu plan -input=false -no-color | tee plan.txt
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            set +e
+            tofu plan -input=false -no-color -detailed-exitcode | tee plan.txt
+            rc=$?
+            set -e
+            if [ "$rc" -eq 2 ]; then
+              echo "::error::OpenTofu drift detected in infra/live/prod!"
+              exit 2
+            elif [ "$rc" -ne 0 ]; then
+              exit "$rc"
+            fi
+          else
+            tofu plan -input=false -no-color | tee plan.txt
+          fi
 
       - name: Post Plan Summary on PR
         if: github.event_name == 'pull_request'
@@ -109,7 +131,7 @@ jobs:
   apply-prod:
     name: Apply OCI Infrastructure (prod)
     needs: plan-prod
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     environment: production
 
@@ -199,7 +221,20 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          tofu plan -input=false -no-color | tee plan.txt
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            set +e
+            tofu plan -input=false -no-color -detailed-exitcode | tee plan.txt
+            rc=$?
+            set -e
+            if [ "$rc" -eq 2 ]; then
+              echo "::error::OpenTofu drift detected in infra/live/dns!"
+              exit 2
+            elif [ "$rc" -ne 0 ]; then
+              exit "$rc"
+            fi
+          else
+            tofu plan -input=false -no-color | tee plan.txt
+          fi
 
       - name: Post DNS Plan Summary on PR
         if: github.event_name == 'pull_request' && steps.check_dns.outputs.enabled == 'true'
@@ -219,7 +254,7 @@ jobs:
   apply-dns:
     name: Apply Porkbun DNS (marcelwalder.eu)
     needs: [apply-prod, plan-dns]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && github.event_name != 'schedule'
     runs-on: ubuntu-latest
     environment: production
     env:
