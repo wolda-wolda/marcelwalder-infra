@@ -75,8 +75,8 @@ jobs:
       - name: Install Ansible & validate playbook syntax
         run: |
           python3 -m pip install --upgrade pip
-          pip install ansible-core
-          ansible-galaxy collection install ansible.posix
+          pip install -r ansible/requirements.txt
+          ansible-galaxy collection install -r ansible/requirements.yml
           cd ansible
           ansible-playbook --syntax-check playbooks/site.yml
           ansible-playbook --syntax-check playbooks/harden.yml
@@ -95,10 +95,10 @@ jobs:
       - name: Install Ansible
         run: |
           python3 -m pip install --upgrade pip
-          pip install ansible-core
+          pip install -r ansible/requirements.txt
 
       - name: Install Ansible POSIX collection
-        run: ansible-galaxy collection install ansible.posix
+        run: ansible-galaxy collection install -r ansible/requirements.yml
 
       - name: Configure SSH key
         shell: bash

@@ -3,12 +3,15 @@
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",
-    "docker:pinDigests"
+    "docker:pinDigests",
+    ":configMigration",
+    "abandonments:recommended"
   ],
   "timezone": "Europe/Vienna",
   "schedule": [
     "before 6am on monday"
   ],
+  "minimumReleaseAge": "3 days",
   "labels": [
     "dependencies"
   ],
@@ -65,6 +68,14 @@
         "docker-compose"
       ],
       "groupName": "Docker Compose images"
+    },
+    {
+      "description": "Group Ansible CLI and Galaxy collection updates",
+      "matchManagers": [
+        "pip_requirements",
+        "ansible-galaxy"
+      ],
+      "groupName": "Ansible"
     }
   ]
 }
