@@ -5,3 +5,7 @@ After=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/sbin/marcelwalder-systemd-alert %i
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes

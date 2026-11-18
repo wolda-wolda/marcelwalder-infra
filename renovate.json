@@ -12,27 +12,15 @@
   "labels": [
     "dependencies"
   ],
+  "ignoreDeps": [
+    "hashicorp/terraform"
+  ],
   "docker-compose": {
     "managerFilePatterns": [
       "/(^|/)(?:docker-)?compose[^/]*\\.ya?ml$/",
       "/^ansible/files/.+-compose\\.ya?ml$/"
     ]
   },
-  "customManagers": [
-    {
-      "customType": "regex",
-      "description": "Update OpenTofu CLI version in GitHub Actions workflows",
-      "managerFilePatterns": [
-        "/^\\.github/workflows/.+\\.ya?ml$/"
-      ],
-      "matchStrings": [
-        "tofu_version:\\s*[\"']?(?<currentValue>\\d+\\.\\d+\\.\\d+)[\"']?"
-      ],
-      "depNameTemplate": "opentofu/opentofu",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.*)$"
-    }
-  ],
   "packageRules": [
     {
       "description": "Prefer OpenTofu Registry for providers and modules",
@@ -45,17 +33,29 @@
       ]
     },
     {
-      "description": "Group GitHub Actions updates",
+      "description": "Group GitHub Actions updates (excluding OpenTofu CLI)",
       "matchManagers": [
         "github-actions"
+      ],
+      "matchPackageNames": [
+        "!opentofu"
       ],
       "groupName": "GitHub Actions"
     },
     {
       "description": "Group OpenTofu CLI and provider updates",
       "matchManagers": [
-        "terraform",
-        "custom.regex"
+        "terraform"
+      ],
+      "groupName": "OpenTofu"
+    },
+    {
+      "description": "Group OpenTofu CLI version from setup-opentofu",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchPackageNames": [
+        "opentofu"
       ],
       "groupName": "OpenTofu"
     },

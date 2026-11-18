@@ -21,18 +21,26 @@ for svc in nginx docker fail2ban prometheus-node-exporter wg-quick@wg0; do
     fi
 done
 
-# 2. Docker-Mailserver container
-DMS_STATE="$(docker inspect --format='{{.State.Status}}' mailserver 2>/dev/null || echo 'missing')"
-if [ "$DMS_STATE" != "running" ]; then
+# 2. Docker-Mailserver container (status and Docker HEALTHCHECK)
+DMS_INFO="$(docker inspect --format='{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' mailserver 2>/dev/null || echo 'missing:none')"
+DMS_STATE="${DMS_INFO%%:*}"
+DMS_HEALTH="${DMS_INFO#*:}"
+if [ "$DMS_STATE" != "running" ] || [ "$DMS_HEALTH" = "unhealthy" ]; then
     if [ -f /opt/mailserver/docker-compose.yml ]; then
-        docker compose -f /opt/mailserver/docker-compose.yml up -d >/dev/null 2>&1 || true
-        sleep 5
+        if [ "$DMS_STATE" = "running" ] && [ "$DMS_HEALTH" = "unhealthy" ]; then
+            docker compose -f /opt/mailserver/docker-compose.yml restart mailserver >/dev/null 2>&1 || true
+        else
+            docker compose -f /opt/mailserver/docker-compose.yml up -d >/dev/null 2>&1 || true
+        fi
+        sleep 10
     fi
-    DMS_STATE="$(docker inspect --format='{{.State.Status}}' mailserver 2>/dev/null || echo 'missing')"
-    if [ "$DMS_STATE" = "running" ]; then
-        HEALED+=("Container 'mailserver' was not running and was automatically started.")
+    DMS_INFO="$(docker inspect --format='{{.State.Status}}:{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' mailserver 2>/dev/null || echo 'missing:none')"
+    DMS_STATE="${DMS_INFO%%:*}"
+    DMS_HEALTH="${DMS_INFO#*:}"
+    if [ "$DMS_STATE" = "running" ] && [ "$DMS_HEALTH" != "unhealthy" ]; then
+        HEALED+=("Container 'mailserver' was down/unhealthy and automatically recovered.")
     else
-        FAILURES+=("Container 'mailserver' is NOT running (state: ${DMS_STATE}).")
+        FAILURES+=("Container 'mailserver' is NOT healthy (state: ${DMS_STATE}, health: ${DMS_HEALTH}).")
     fi
 fi
 

@@ -38,12 +38,8 @@ def _parse_sasl_credentials():
     return None
 
 
-def send_direct_smtp(subject: str, body: str, recipient: str) -> bool:
-    """Deliver alert mail directly via OCI Email Delivery STARTTLS relay."""
-    parsed = _parse_sasl_credentials()
-    if not parsed:
-        return False
-    host, port, username, password = parsed
+def _build_email(subject: str, body: str, recipient: str) -> EmailMessage:
+    """Build an RFC-compliant EmailMessage (rejects CR/LF header injection)."""
     msg = EmailMessage()
     msg["From"] = DEFAULT_SENDER
     msg["To"] = recipient
@@ -51,6 +47,16 @@ def send_direct_smtp(subject: str, body: str, recipient: str) -> bool:
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="marcelwalder.eu")
     msg.set_content(body)
+    return msg
+
+
+def send_direct_smtp(subject: str, body: str, recipient: str) -> bool:
+    """Deliver alert mail directly via OCI Email Delivery STARTTLS relay."""
+    parsed = _parse_sasl_credentials()
+    if not parsed:
+        return False
+    host, port, username, password = parsed
+    msg = _build_email(subject, body, recipient)
 
     context = ssl.create_default_context()
     with smtplib.SMTP(host, port, timeout=20) as server:
@@ -64,16 +70,10 @@ def send_direct_smtp(subject: str, body: str, recipient: str) -> bool:
 
 def send_fallback_container(subject: str, body: str, recipient: str) -> bool:
     """Fall back to local mailserver sendmail if direct SMTP is unavailable."""
-    payload = (
-        f"From: {DEFAULT_SENDER}\n"
-        f"To: {recipient}\n"
-        f"Subject: {subject}\n"
-        f"Date: {formatdate(localtime=True)}\n\n"
-        f"{body}\n"
-    )
+    msg = _build_email(subject, body, recipient)
     res = subprocess.run(
-        ["docker", "exec", "-i", "mailserver", "sendmail", "-f", "info@marcelwalder.eu", recipient],
-        input=payload,
+        ["docker", "exec", "-i", "mailserver", "sendmail", "-f", "info@marcelwalder.eu", "--", recipient],
+        input=msg.as_string(),
         text=True,
         capture_output=True,
         timeout=20,
