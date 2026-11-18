@@ -21,7 +21,6 @@ concurrency:
 
 permissions:
   contents: read
-  pull-requests: write
 
 env:
   AWS_ACCESS_KEY_ID: ${{ secrets.OCI_S3_ACCESS_KEY_ID }}
@@ -39,6 +38,9 @@ jobs:
   plan-prod:
     name: Plan OCI Infrastructure (prod)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
 
     steps:
       - name: Checkout repository
@@ -119,7 +121,8 @@ jobs:
         with:
           script: |
             const fs = require('fs');
-            const plan = fs.readFileSync('infra/live/prod/plan.txt', 'utf8');
+            const rawPlan = fs.readFileSync('infra/live/prod/plan.txt', 'utf8');
+            const plan = rawPlan.replace(/ocid1\.[a-z0-9._-]+/gi, '[REDACTED_OCID]');
             const truncated = plan.length > 60000 ? plan.slice(0, 60000) + '\n... (truncated)' : plan;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -181,6 +184,9 @@ jobs:
     name: Plan Porkbun DNS (marcelwalder.eu)
     needs: plan-prod
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       PORKBUN_API_KEY: ${{ secrets.PORKBUN_API_KEY }}
       PORKBUN_SECRET_KEY: ${{ secrets.PORKBUN_SECRET_KEY }}
