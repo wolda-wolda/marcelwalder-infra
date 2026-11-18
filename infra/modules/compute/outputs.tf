@@ -17,3 +17,8 @@ output "public_ips" {
     )
   }
 }
+
+output "boot_volume_ids" {
+  description = "Map of instance key to OCI boot volume OCID."
+  value       = { for k, inst in oci_core_instance.this : k => inst.boot_volume_id }
+}

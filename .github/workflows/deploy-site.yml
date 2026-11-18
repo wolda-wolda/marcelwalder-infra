@@ -150,6 +150,10 @@ jobs:
           echo "GET https://mail.marcelwalder.eu/?admin returned HTTP $mail_admin_code"
           [ "$mail_admin_code" = "403" ]
 
+          bimi_headers=$(curl -fsS -I https://mail.marcelwalder.eu/avatar.svg)
+          echo "$bimi_headers" | grep -qi "^content-security-policy:"
+          echo "Verified BIMI avatar.svg served with CSP header."
+
           mta_code=$(curl -sS -o /dev/null -w "%{http_code}" https://mta-sts.marcelwalder.eu/.well-known/mta-sts.txt)
           echo "GET https://mta-sts.marcelwalder.eu/.well-known/mta-sts.txt returned HTTP $mta_code"
           [ "$mta_code" = "200" ]

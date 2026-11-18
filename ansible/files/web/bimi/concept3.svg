@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Marcel Walder - Sovereign Shield</title>
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#050C1A"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="neon3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="50%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+
+  <circle cx="256" cy="256" r="248" fill="url(#bg3)"/>
+  <circle cx="256" cy="256" r="240" fill="none" stroke="url(#neon3)" stroke-width="4" opacity="0.5"/>
+
+  <!-- Hardened Shield Contour -->
+  <polygon points="256,75 405,135 405,260 256,430 107,260 107,135" fill="#0A1628" stroke="url(#neon3)" stroke-width="6"/>
+
+  <!-- MW Monogram Facet Inside Shield -->
+  <path d="M 155 315 L 155 190 L 210 290 L 256 220 L 302 290 L 357 190 L 357 315" 
+        fill="none" 
+        stroke="url(#neon3)" 
+        stroke-width="28" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <polygon points="256,260 220,335 292,335" fill="#06B6D4" opacity="0.8"/>
+  <circle cx="256" cy="355" r="9" fill="#10B981"/>
+</svg>

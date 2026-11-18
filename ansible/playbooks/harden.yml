@@ -301,52 +301,116 @@
         path: /var/backups/uptime-kuma-pre-upgrade.tar.gz
         state: absent
 
-    - name: Check whether mailserver.env exists
-      ansible.builtin.stat:
-        path: /opt/mailserver/mailserver.env
-      register: mailserver_env
-
-    - name: Restrict /opt/mailserver/mailserver.env permissions
+    - name: Ensure mailserver and SnappyMail directories exist
       ansible.builtin.file:
-        path: /opt/mailserver/mailserver.env
-        owner: root
-        group: root
-        mode: "0600"
-      when: mailserver_env.stat.exists
-
-    - name: Disable unused POP3 listener in mailserver.env
-      ansible.builtin.lineinfile:
-        path: /opt/mailserver/mailserver.env
-        regexp: '^#?ENABLE_POP3='
-        line: "ENABLE_POP3=0"
-      when: mailserver_env.stat.exists
-
-    - name: Check whether /opt/mailserver/config directory exists
-      ansible.builtin.stat:
-        path: /opt/mailserver/config
-      register: mailserver_config_dir
-
-    - name: Restrict /opt/mailserver/config directory permissions
-      ansible.builtin.file:
-        path: /opt/mailserver/config
+        path: "{{ item.path }}"
         state: directory
         owner: root
         group: root
-        mode: "0750"
-      when: mailserver_config_dir.stat.exists
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: /opt/mailserver, mode: "0755" }
+        - { path: /opt/mailserver/config, mode: "0750" }
+        - { path: /opt/snappymail, mode: "0755" }
 
-    - name: Check whether /opt/mailserver/config/postfix-accounts.cf exists
-      ansible.builtin.stat:
-        path: /opt/mailserver/config/postfix-accounts.cf
-      register: postfix_accounts_cf
+    - name: Install Docker-Mailserver Compose manifest
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/mailserver/docker-compose.yml"
+        dest: /opt/mailserver/docker-compose.yml
+        owner: root
+        group: root
+        mode: "0644"
 
-    - name: Restrict /opt/mailserver/config/postfix-accounts.cf permissions
-      ansible.builtin.file:
-        path: /opt/mailserver/config/postfix-accounts.cf
+    - name: Install Docker-Mailserver environment configuration
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/mailserver/mailserver.env"
+        dest: /opt/mailserver/mailserver.env
         owner: root
         group: root
         mode: "0600"
-      when: postfix_accounts_cf.stat.exists
+
+    - name: Install non-secret Docker-Mailserver config files
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/mailserver/{{ item }}"
+        dest: "/opt/mailserver/config/{{ item }}"
+        owner: root
+        group: root
+        mode: "0640"
+      loop:
+        - before.dovecot.sieve
+        - postfix-virtual.cf
+
+    - name: Ensure placeholder Docker-Mailserver config files exist if missing
+      ansible.builtin.copy:
+        content: ""
+        dest: "/opt/mailserver/config/{{ item }}"
+        owner: root
+        group: root
+        mode: "0640"
+        force: false
+      loop:
+        - dovecot-quotas.cf
+        - postfix-main.cf
+
+    - name: Enforce restrictive permissions on placeholder Docker-Mailserver config files
+      ansible.builtin.file:
+        path: "/opt/mailserver/config/{{ item }}"
+        state: file
+        owner: root
+        group: root
+        mode: "0640"
+      loop:
+        - dovecot-quotas.cf
+        - postfix-main.cf
+
+    - name: Check secret Docker-Mailserver config files
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /opt/mailserver/config/postfix-accounts.cf
+        - /opt/mailserver/config/postfix-sasl-password.cf
+      register: mailserver_secret_files
+
+    - name: Restrict secret Docker-Mailserver config file permissions
+      ansible.builtin.file:
+        path: "{{ item.item }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ mailserver_secret_files.results }}"
+      when: item.stat.exists
+
+    - name: Install SnappyMail Docker Compose manifest
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/mailserver/snappymail-compose.yml"
+        dest: /opt/snappymail/docker-compose.yml
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Ensure Let's Encrypt deploy renewal hooks directory exists
+      ansible.builtin.file:
+        path: /etc/letsencrypt/renewal-hooks/deploy
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install Let's Encrypt deploy hook to reload Nginx and restart mailserver
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/reload-mailserver.sh"
+        dest: /etc/letsencrypt/renewal-hooks/deploy/reload-mailserver.sh
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install hardened mail-avatar BIMI CLI utility
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/maintenance/mail-avatar.py"
+        dest: /usr/local/bin/mail-avatar
+        owner: root
+        group: root
+        mode: "0755"
 
     - name: Ensure local /backup directory exists with strict root-only permissions
       ansible.builtin.file:
@@ -480,29 +544,30 @@
       no_log: true
       notify: Restart wg-quick@wg0
 
-    - name: Persist WireGuard UDP 51820 and wg0 rules in /etc/iptables/rules.v4
+    - name: Persist mail/web TCP ports, WireGuard UDP 51820, and wg0 rules in /etc/iptables/rules.v4
       ansible.builtin.lineinfile:
         path: /etc/iptables/rules.v4
         insertbefore: "^-A INPUT -j REJECT"
         line: "{{ item }}"
       loop:
+        - "-A INPUT -p tcp -m multiport --dports 25,80,443,465,587,993 -j ACCEPT"
         - "-A INPUT -p udp -m udp --dport 51820 -j ACCEPT"
         - "-A INPUT -i wg0 -s 10.66.66.0/24 -j ACCEPT"
 
-    - name: Ensure live iptables INPUT chain permits WireGuard UDP 51820 and wg0 before REJECT
+    - name: Ensure live iptables INPUT chain permits mail/web TCP ports, WireGuard UDP 51820, and wg0 before REJECT
       ansible.builtin.shell: |
-        changed=0
-        reject_line="$(iptables -L INPUT --line-numbers | awk '/REJECT/ {print $1; exit}')"
-        if ! iptables -C INPUT -p udp -m udp --dport 51820 -j ACCEPT 2>/dev/null; then
-            iptables -I INPUT "${reject_line:-1}" -p udp -m udp --dport 51820 -j ACCEPT
-            changed=1
-        fi
-        reject_line="$(iptables -L INPUT --line-numbers | awk '/REJECT/ {print $1; exit}')"
-        if ! iptables -C INPUT -i wg0 -s 10.66.66.0/24 -j ACCEPT 2>/dev/null; then
-            iptables -I INPUT "${reject_line:-1}" -i wg0 -s 10.66.66.0/24 -j ACCEPT
-            changed=1
-        fi
-        exit "$((changed == 1 ? 0 : 0))"
+        set -euo pipefail
+        ensure_rule() {
+          local -a rule=("$@")
+          if ! iptables -C INPUT "${rule[@]}" 2>/dev/null; then
+            local reject_line
+            reject_line="$(iptables -L INPUT --line-numbers | awk '/REJECT/ {print $1; exit}')"
+            iptables -I INPUT "${reject_line:-1}" "${rule[@]}"
+          fi
+        }
+        ensure_rule -p tcp -m multiport --dports 25,80,443,465,587,993 -j ACCEPT
+        ensure_rule -p udp -m udp --dport 51820 -j ACCEPT
+        ensure_rule -i wg0 -s 10.66.66.0/24 -j ACCEPT
       args:
         executable: /bin/bash
       changed_when: false
@@ -553,11 +618,14 @@
         group: root
         mode: "0755"
 
-    - name: Ensure /usr/local/bin/mailserver-update symlink exists
+    - name: Ensure /usr/local/bin convenience symlinks exist
       ansible.builtin.file:
-        src: /opt/mailserver-update.sh
-        dest: /usr/local/bin/mailserver-update
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
         state: link
+      loop:
+        - { src: /opt/mailserver-update.sh, dest: /usr/local/bin/mailserver-update }
+        - { src: /opt/mailserver-backup.sh, dest: /usr/local/bin/mailserver-backup }
 
     - name: Install weekly automated patching cron schedule
       ansible.builtin.copy:
@@ -622,6 +690,28 @@
         regexp: "^#?PasswordAuthentication"
         line: "PasswordAuthentication no"
       notify: Validate and restart sshd
+
+    - name: Remove duplicate quota-watchdog entry from root user crontab
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if crontab -u root -l 2>/dev/null | grep -qF '/opt/quota-watchdog.sh'; then
+          remaining="$(crontab -u root -l 2>/dev/null | grep -vF '/opt/quota-watchdog.sh' | grep -v '^#' | sed '/^[[:space:]]*$/d' || true)"
+          if [ -z "$remaining" ]; then
+            crontab -u root -r
+          else
+            crontab -u root -l 2>/dev/null | grep -vF '/opt/quota-watchdog.sh' | crontab -u root -
+          fi
+          echo "REMOVED"
+        fi
+      args:
+        executable: /bin/bash
+      register: root_crontab_dedup
+      changed_when: "'REMOVED' in root_crontab_dedup.stdout"
+
+    - name: Remove legacy standalone Certbot helper script
+      ansible.builtin.file:
+        path: /opt/get-ssl.sh
+        state: absent
 
     - name: Stop and mask unused rpcbind services
       ansible.builtin.systemd_service:

@@ -15,22 +15,26 @@ marcelwalder-infra/
 │   │   ├── compute/        # Map-driven OCI VM instances + optional reserved public IPs
 │   │   └── dns/            # Porkbun DNS record module
 │   └── live/
-│       ├── prod/           # Primary OCI infrastructure stack (imported Mail-Server & network)
+│       ├── prod/           # Primary OCI stack (VCN, VM, buckets, backup policy, Email Delivery, alarms, ONS, budget, IAM)
 │       └── dns/            # Porkbun DNS stack (consumes prod public IPs via remote state)
 ├── ansible/
 │   ├── inventory/hosts.yml
-│   ├── files/nginx/        # Hardened security headers snippet
+│   ├── files/
+│   │   ├── mailserver/     # Docker-Mailserver & SnappyMail compose manifests and mail configs
+│   │   ├── nginx/          # Hardened Nginx main config, snippets, and site vhosts
+│   │   └── web/            # BIMI SVG assets and MTA-STS policy
 │   └── playbooks/
-│       ├── site.yml        # Sync site/ to /var/www/marcelwalder.eu and reload Nginx
-│       └── harden.yml      # Baseline OS hardening for newly provisioned Ubuntu VMs
+│       ├── site.yml        # Sync site/, BIMI/MTA-STS assets, Nginx vhosts, and reload Nginx
+│       └── harden.yml      # Host hardening, mail/monitoring stacks, backups, firewall, and WireGuard
 └── site/                   # Self-hosted static CV bundle (zero external font/avatar requests)
 ```
 
 ## Architecture Highlights
 
-- **OpenTofu + OCI Object Storage Backend:** State is stored in the private, versioned OCI Object Storage bucket `tfstate-marcelwalder-prod` (`eu-frankfurt-1`) using S3 compatibility and **client-side AES-GCM encryption** (`encryption.tf`).
+- **OpenTofu + OCI Object Storage Backend:** State is stored in the private, versioned OCI Object Storage bucket `tfstate-marcelwalder-prod` (`eu-frankfurt-1`, also tracked with `prevent_destroy = true`) using S3 compatibility and **client-side AES-GCM encryption** (`encryption.tf`).
+- **Complete OCI Operational Guardrails:** `infra/live/prod` manages the `backups-marcelwalder-prod` and `tfstate-marcelwalder-prod` buckets, `Always-Free-Mail-Backup-Policy` boot volume schedule, OCI Email Delivery (`marcelwalder.eu` domain, `dkim1`, approved senders), `Free-Tier-Quota-Alerts` ONS topic/subscription, backup completion event rule, Always Free down/idle-reclaim monitoring alarms, `Zero-Spend-Guard` budget/alert rules, and `Tenant Admin Policy`.
 - **Extensible Multi-VM Compute:** `infra/live/prod/topology.auto.tfvars` defines `instances` as a map. Adding another Always Free ARM or micro VM only requires adding a map entry (plus an NSG in `nsgs` if custom ports are needed).
-- **Automated DNS Sync:** `infra/live/dns` reads `instance_public_ips` directly from `prod/terraform.tfstate` via `terraform_remote_state` and includes `imports.tf` for existing `marcelwalder.eu` records.
+- **Automated DNS Sync:** `infra/live/dns` reads `instance_public_ips` directly from `prod/terraform.tfstate` via `terraform_remote_state` and includes `imports.tf` for existing `marcelwalder.eu` records (`ha.marcelwalder.eu` is intentionally managed by a separate Home Assistant repository).
 - **GDPR & CSP Guardrails:** `.github/workflows/deploy-site.yml` fails if external Google Fonts / GitHub avatar URLs or inline `<script>` blocks appear in `site/`, then deploys via Ansible and smoke-tests live HTTPS headers.
 
 ## Required GitHub Actions Secrets

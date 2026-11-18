@@ -19,6 +19,7 @@ override.tf.json
 *.env
 *.local.env
 .env*
+!ansible/files/mailserver/mailserver.env
 
 # Ansible & Python
 ansible/*.retry

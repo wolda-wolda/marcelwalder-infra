@@ -17,9 +17,14 @@ tar -czf "$TARGET" \
     -C / \
     opt/mailserver/mail-data \
     opt/mailserver/config \
+    opt/mailserver/docker-compose.yml \
+    opt/mailserver/mailserver.env \
     opt/snappymail/volume \
+    opt/snappymail/docker-compose.yml \
     etc/letsencrypt \
     etc/nginx \
+    var/www/mail \
+    var/www/mta-sts \
     opt/quota-watchdog.sh \
     opt/mailserver-update.sh
 

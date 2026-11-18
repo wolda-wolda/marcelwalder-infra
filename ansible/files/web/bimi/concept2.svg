@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.2" baseProfile="tiny-ps" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Marcel Walder - Swiss Minimalist</title>
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#020617"/>
+    </linearGradient>
+    <linearGradient id="metal2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="60%" stop-color="#E2E8F0"/>
+      <stop offset="100%" stop-color="#94A3B8"/>
+    </linearGradient>
+    <linearGradient id="accent2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0284C7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Clean dark disk -->
+  <circle cx="256" cy="256" r="248" fill="url(#bg2)"/>
+  <circle cx="256" cy="256" r="242" fill="none" stroke="#1E293B" stroke-width="5"/>
+  <circle cx="256" cy="256" r="236" fill="none" stroke="url(#accent2)" stroke-width="2" opacity="0.6"/>
+
+  <!-- Bold Modern Typography MW -->
+  <!-- Letter M -->
+  <polygon points="95,350 135,350 135,200 185,310 215,310 265,200 265,350 305,350 305,162 250,162 200,270 150,162 95,162" fill="url(#metal2)"/>
+  
+  <!-- Letter W Offset / Interlinked -->
+  <polygon points="275,350 310,230 340,230 365,315 390,230 420,230 380,350 350,350 325,270 305,350" fill="url(#accent2)"/>
+
+  <!-- Accent sovereign mark -->
+  <circle cx="435" cy="340" r="10" fill="url(#accent2)"/>
+</svg>

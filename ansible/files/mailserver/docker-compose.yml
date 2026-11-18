@@ -1,0 +1,24 @@
+services:
+  mailserver:
+    image: ghcr.io/docker-mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: mail
+    domainname: marcelwalder.eu
+    env_file: mailserver.env
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+    volumes:
+      - /opt/mailserver/mail-data:/var/mail
+      - /opt/mailserver/mail-state:/var/mail-state
+      - /opt/mailserver/mail-logs:/var/log/mail
+      - /opt/mailserver/config:/tmp/docker-mailserver
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /etc/localtime:/etc/localtime:ro
+    restart: always
+    stop_grace_period: 1m
+    pids_limit: 512
+    cap_add:
+      - NET_ADMIN

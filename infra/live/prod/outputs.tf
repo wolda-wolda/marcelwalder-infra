@@ -32,3 +32,28 @@ output "backup_bucket_name" {
   description = "OCI Object Storage bucket used for encrypted Restic offsite backups."
   value       = oci_objectstorage_bucket.backups.name
 }
+
+output "tfstate_bucket_name" {
+  description = "OCI Object Storage bucket storing OpenTofu remote state."
+  value       = oci_objectstorage_bucket.tfstate.name
+}
+
+output "email_domain_id" {
+  description = "OCI Email Delivery domain OCID."
+  value       = oci_email_email_domain.marcelwalder_eu.id
+}
+
+output "dkim_dns_subdomain_name" {
+  description = "DNS subdomain for the active OCI Email Delivery DKIM selector."
+  value       = oci_email_dkim.dkim1.dns_subdomain_name
+}
+
+output "ons_topic_id" {
+  description = "OCI ONS notification topic OCID for operational and quota alerts."
+  value       = oci_ons_notification_topic.quota_alerts.topic_id
+}
+
+output "budget_id" {
+  description = "OCI Zero-Spend-Guard budget OCID."
+  value       = oci_budget_budget.zero_spend_guard.id
+}

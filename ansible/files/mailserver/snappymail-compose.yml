@@ -1,0 +1,21 @@
+services:
+  snappymail:
+    image: djmaze/snappymail:latest
+    container_name: snappymail
+    restart: always
+    ports:
+      - "127.0.0.1:8888:8888"
+    volumes:
+      - /opt/snappymail/volume:/var/lib/snappymail
+    mem_limit: 256m
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true

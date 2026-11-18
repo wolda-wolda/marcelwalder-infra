@@ -62,3 +62,9 @@ variable "nsgs" {
   }))
   default = {}
 }
+
+variable "alert_email" {
+  description = "Administrative email address for OCI quota, alarm, backup, and budget notifications."
+  type        = string
+  default     = "marcelwalder12@gmail.com"
+}

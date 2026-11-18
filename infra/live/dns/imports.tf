@@ -14,6 +14,21 @@ import {
 }
 
 import {
+  to = module.dns.porkbun_dns_record.this["status_a"]
+  id = "603929644_marcelwalder.eu_A"
+}
+
+import {
+  to = module.dns.porkbun_dns_record.this["analytics_a"]
+  id = "603939397_marcelwalder.eu_A"
+}
+
+import {
+  to = module.dns.porkbun_dns_record.this["kuma_a"]
+  id = "604211082_marcelwalder.eu_A"
+}
+
+import {
   to = module.dns.porkbun_dns_record.this["mta_sts_cname"]
   id = "602975688_marcelwalder.eu_CNAME"
 }

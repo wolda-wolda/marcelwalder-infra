@@ -16,12 +16,17 @@ set +a
 candidates=(
     /opt/mailserver/mail-data
     /opt/mailserver/config
+    /opt/mailserver/docker-compose.yml
+    /opt/mailserver/mailserver.env
     /opt/snappymail/volume
+    /opt/snappymail/docker-compose.yml
     /opt/uptime-kuma/data
     /etc/letsencrypt
     /etc/nginx
     /etc/marcelwalder
     /etc/wireguard
+    /var/www/mail
+    /var/www/mta-sts
     /opt/quota-watchdog.sh
     /opt/mailserver-update.sh
 )
