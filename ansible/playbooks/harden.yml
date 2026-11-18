@@ -104,11 +104,26 @@
         replace: 'create 640 www-data adm'
       when: nginx_pkg.changed
 
-    - name: Enable unattended security updates
-      ansible.builtin.service:
-        name: unattended-upgrades
+    - name: Configure unattended-upgrades schedules and allowed origins
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/apt/{{ item }}"
+        dest: "/etc/apt/apt.conf.d/{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - 20auto-upgrades
+        - 50unattended-upgrades
+
+    - name: Enable unattended security updates and APT daily timers
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
         enabled: true
         state: started
+      loop:
+        - unattended-upgrades.service
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
 
     - name: Install custom Fail2ban Nginx probe-drop filter
       ansible.builtin.copy:
@@ -380,6 +395,15 @@
       loop: "{{ mailserver_secret_files.results }}"
       when: item.stat.exists
 
+    - name: Ensure Docker-Mailserver container matches pinned GitOps image
+      ansible.builtin.command: docker compose -f /opt/mailserver/docker-compose.yml up -d --remove-orphans
+      register: mailserver_up
+      changed_when: >-
+        'Started' in mailserver_up.stderr
+        or 'Created' in mailserver_up.stderr
+        or 'Recreated' in mailserver_up.stderr
+      when: mailserver_secret_files.results[0].stat.exists
+
     - name: Install SnappyMail Docker Compose manifest
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/mailserver/snappymail-compose.yml"
@@ -387,6 +411,23 @@
         owner: root
         group: root
         mode: "0644"
+
+    - name: Ensure SnappyMail container matches pinned GitOps image
+      ansible.builtin.command: docker compose -f /opt/snappymail/docker-compose.yml up -d --remove-orphans
+      register: snappymail_up
+      changed_when: >-
+        'Started' in snappymail_up.stderr
+        or 'Created' in snappymail_up.stderr
+        or 'Recreated' in snappymail_up.stderr
+
+    - name: Wait for SnappyMail HTTP backend on localhost:8888
+      ansible.builtin.uri:
+        url: http://127.0.0.1:8888/
+        status_code: [200]
+      register: snappymail_health
+      retries: 20
+      delay: 3
+      until: snappymail_health.status is defined and snappymail_health.status == 200
 
     - name: Ensure Let's Encrypt deploy renewal hooks directory exists
       ansible.builtin.file:
