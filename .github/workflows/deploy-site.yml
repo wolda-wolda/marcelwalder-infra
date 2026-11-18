@@ -6,6 +6,7 @@ on:
       - "site/**"
       - "ansible/**"
       - ".github/workflows/deploy-site.yml"
+      - "renovate.json"
   push:
     branches:
       - main
@@ -24,7 +25,7 @@ permissions:
 
 jobs:
   verify-compliance:
-    name: Verify Self-Hosted & CSP Hygiene
+    name: Verify Compliance, Compose & Ansible Syntax
     runs-on: ubuntu-latest
 
     steps:
@@ -43,6 +44,42 @@ jobs:
             exit 1
           fi
           echo "Compliance checks passed: 100% self-hosted assets and CSP-safe scripts."
+
+      - name: Validate Docker Compose manifests & immutable sha256 digest pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          compose_files=(
+            ansible/files/mailserver/docker-compose.yml
+            ansible/files/mailserver/snappymail-compose.yml
+            ansible/files/monitoring/uptime-kuma-compose.yml
+          )
+          for f in "${compose_files[@]}"; do
+            docker compose -f "$f" config --quiet
+            if ! grep -Eq '^\s*image:\s+\S+@sha256:[a-f0-9]{64}\s*$' "$f"; then
+              echo "ERROR: $f must pin image by immutable @sha256:<digest>" >&2
+              exit 1
+            fi
+          done
+          echo "Compose syntax and @sha256 digest pin checks passed."
+
+      - name: Validate Renovate JSON, Python scripts, and shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool renovate.json > /dev/null
+          find ansible/files -name '*.py' -exec python3 -m py_compile {} +
+          find ansible/files -name '*.sh' -exec bash -n {} +
+          echo "JSON, Python, and Bash syntax checks passed."
+
+      - name: Install Ansible & validate playbook syntax
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install ansible-core
+          ansible-galaxy collection install ansible.posix
+          cd ansible
+          ansible-playbook --syntax-check playbooks/site.yml
+          ansible-playbook --syntax-check playbooks/harden.yml
 
   deploy:
     name: Deploy via Ansible
