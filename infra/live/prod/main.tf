@@ -415,7 +415,10 @@ resource "oci_identity_domains_user" "opentofu_ci" {
   }
 
   lifecycle {
-    ignore_changes = [urnietfparamsscimschemasoracleidcsextension_oci_tags]
+    ignore_changes = [
+      urnietfparamsscimschemasoracleidcsextension_oci_tags,
+      schemas,
+    ]
   }
 }
 
@@ -431,7 +434,11 @@ resource "oci_identity_domains_group" "opentofu_ci" {
   }
 
   lifecycle {
-    ignore_changes = [urnietfparamsscimschemasoracleidcsextension_oci_tags]
+    ignore_changes = [
+      urnietfparamsscimschemasoracleidcsextension_oci_tags,
+      schemas,
+      members,
+    ]
   }
 }
 
@@ -450,6 +457,7 @@ resource "oci_identity_policy" "opentofu_ci" {
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage ons-family IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage cloudevents-rules IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage alarms IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to read metrics IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage usage-budgets IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to read users IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to read groups IN TENANCY",
