@@ -68,7 +68,12 @@ if [ -f /opt/snappymail/docker-compose.yml ]; then
         ERROR_MSG="${ERROR_MSG}Failed to start SnappyMail container.\n"
     }
 fi
-docker exec snappymail sh -c 'apk update -q && apk upgrade --no-cache -q nginx && nginx -s reload' >/dev/null 2>&1 || true
+if docker inspect snappymail >/dev/null 2>&1; then
+    docker exec snappymail sh -c 'apk update -q && apk upgrade --no-cache -q nginx libpq libecpg' >/dev/null 2>&1 || true
+    if docker exec snappymail sh -c 'ls -l /proc/$(cat /tmp/nginx.pid)/exe' 2>/dev/null | grep -q '(deleted)'; then
+        docker restart snappymail >/dev/null 2>&1 || true
+    fi
+fi
 NEW_SNAPPY_IMAGE=$(docker inspect --format='{{.Image}}' snappymail 2>/dev/null || echo "none")
 if [ "$OLD_SNAPPY_IMAGE" != "$NEW_SNAPPY_IMAGE" ]; then
     UPDATES_MADE="${UPDATES_MADE}- SnappyMail updated\n"

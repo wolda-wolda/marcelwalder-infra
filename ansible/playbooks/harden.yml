@@ -40,11 +40,14 @@
         update_cache: true
         cache_valid_time: 3600
 
-    - name: Install official nginx.org signing key
+    - name: Install official nginx.org signing key with fingerprint verification
       ansible.builtin.shell: |
         set -euo pipefail
-        curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor --yes -o /usr/share/keyrings/nginx-archive-keyring.gpg
-        chmod 0644 /usr/share/keyrings/nginx-archive-keyring.gpg
+        tmp_key="$(mktemp)"
+        trap 'rm -f "$tmp_key"' EXIT
+        curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --dearmor --yes -o "$tmp_key"
+        gpg --show-keys --with-colons "$tmp_key" | grep -q "573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62"
+        install -m 0644 -o root -g root "$tmp_key" /usr/share/keyrings/nginx-archive-keyring.gpg
       args:
         executable: /bin/bash
         creates: /usr/share/keyrings/nginx-archive-keyring.gpg
@@ -59,10 +62,10 @@
         mode: "0644"
       register: nginx_apt_repo
 
-    - name: Pin nginx.org packages above Ubuntu repo packages
+    - name: Pin nginx.org nginx package above Ubuntu repo package
       ansible.builtin.copy:
         content: |
-          Package: *
+          Package: nginx
           Pin: origin nginx.org
           Pin: release o=nginx
           Pin-Priority: 900
@@ -364,6 +367,19 @@
         regexp: '^\s*allow_admin_panel\s*='
         line: "allow_admin_panel = Off"
       when: snappymail_ini.stat.exists
+
+    - name: Ensure SnappyMail container runs patched internal Nginx binary in memory
+      ansible.builtin.shell: |
+        set -euo pipefail
+        if docker inspect snappymail >/dev/null 2>&1; then
+          docker exec snappymail sh -c 'apk update -q && apk upgrade --no-cache -q nginx libpq libecpg'
+          if docker exec snappymail sh -c 'ls -l /proc/$(cat /tmp/nginx.pid)/exe' 2>/dev/null | grep -q '(deleted)'; then
+            docker restart snappymail
+          fi
+        fi
+      args:
+        executable: /bin/bash
+      changed_when: false
 
     - name: Install GoAccess static report update script
       ansible.builtin.copy:
