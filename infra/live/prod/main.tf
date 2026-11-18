@@ -75,7 +75,7 @@ module "network" {
   vcn_cidr_blocks       = ["10.0.0.0/16"]
   vcn_dns_label         = "mailvcn"
   igw_display_name      = "Mail-IGW"
-  default_ingress_rules = local.mail_ingress_rules
+  default_ingress_rules = []
 
   subnets = {
     public = {

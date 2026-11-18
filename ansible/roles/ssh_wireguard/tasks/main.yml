@@ -1,7 +1,7 @@
 ---
 - name: Install hardened OpenSSH drop-in configuration
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/ssh/50-marcelwalder-hardening.conf"
+    src: "{{ (playbook_dir | dirname) }}/files/ssh/50-marcelwalder-hardening.conf"
     dest: /etc/ssh/sshd_config.d/50-marcelwalder-hardening.conf
     owner: root
     group: root
@@ -35,7 +35,7 @@
 - name: Read WireGuard server private key
   ansible.builtin.slurp:
     src: /etc/wireguard/server.key
-  register: wg_server_key_raw
+  register: ssh_wireguard_wg_server_key_raw
   no_log: true
 
 - name: Configure WireGuard wg0 admin mesh interface
@@ -44,7 +44,7 @@
       [Interface]
       Address = 10.66.66.1/24
       ListenPort = 51820
-      PrivateKey = {{ wg_server_key_raw.content | b64decode | trim }}
+      PrivateKey = {{ ssh_wireguard_wg_server_key_raw.content | b64decode | trim }}
 
       [Peer]
       # Admin peer (laptop/workstation)

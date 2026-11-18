@@ -40,7 +40,7 @@
     owner: root
     group: root
     mode: "0644"
-  register: nginx_apt_repo
+  register: base_os_nginx_apt_repo
 
 - name: Pin nginx.org nginx package above Ubuntu repo package
   ansible.builtin.copy:
@@ -53,21 +53,17 @@
     owner: root
     group: root
     mode: "0644"
-  register: nginx_apt_pin
+  register: base_os_nginx_apt_pin
 
 - name: Ensure Nginx is kept updated from official mainline repository
   ansible.builtin.apt:
     name: nginx
     state: latest
-    update_cache: "{{ nginx_apt_repo.changed or nginx_apt_pin.changed }}"
+    update_cache: "{{ base_os_nginx_apt_repo.changed or base_os_nginx_apt_pin.changed }}"
     dpkg_options: "force-confdef,force-confold"
-  register: nginx_pkg
-
-- name: Remove upstream nginx.org default HTTP vhost if added on upgrade
-  ansible.builtin.file:
-    path: /etc/nginx/conf.d/default.conf
-    state: absent
-  when: nginx_pkg.changed
+  notify:
+    - Remove upstream nginx.org default HTTP vhost
+    - Align nginx logrotate ownership
 
 - name: Ensure Nginx cache directory and logrotate user match www-data
   ansible.builtin.file:
@@ -77,16 +73,9 @@
     group: www-data
     mode: "0755"
 
-- name: Align nginx logrotate file creation ownership with www-data
-  ansible.builtin.replace:
-    path: /etc/logrotate.d/nginx
-    regexp: 'create\s+\d+\s+nginx\s+adm'
-    replace: 'create 640 www-data adm'
-  when: nginx_pkg.changed
-
 - name: Configure unattended-upgrades schedules and security-only origins
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/apt/{{ item }}"
+    src: "{{ (playbook_dir | dirname) }}/files/apt/{{ item }}"
     dest: "/etc/apt/apt.conf.d/{{ item }}"
     owner: root
     group: root
@@ -115,7 +104,7 @@
 
 - name: Configure systemd-journald disk size and retention cap
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/systemd/99-marcelwalder-journald.conf"
+    src: "{{ (playbook_dir | dirname) }}/files/systemd/99-marcelwalder-journald.conf"
     dest: /etc/systemd/journald.conf.d/99-marcelwalder-journald.conf
     owner: root
     group: root

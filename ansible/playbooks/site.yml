@@ -6,7 +6,7 @@
     - site
 
   vars:
-    site_src: "{{ playbook_dir }}/../../site/"
+    site_src: "{{ playbook_dir | dirname | dirname }}/site/"
     site_dest: "/var/www/marcelwalder.eu"
     acme_certificates:
       - domain: marcelwalder.eu
@@ -84,22 +84,17 @@
     - name: Configure sysctl for WireGuard bind tolerance
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/systemd/99-marcelwalder-wireguard.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/systemd/99-marcelwalder-wireguard.conf"
         dest: /etc/sysctl.d/99-marcelwalder-wireguard.conf
         owner: root
         group: root
         mode: "0644"
-      register: wireguard_sysctl
-
-    - name: Apply WireGuard sysctl immediately when changed
-      become: true
-      ansible.builtin.command: sysctl -p /etc/sysctl.d/99-marcelwalder-wireguard.conf
-      when: wireguard_sysctl.changed
+      notify: Apply WireGuard sysctl
 
     - name: Install hardened main Nginx configuration
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/nginx.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/nginx.conf"
         dest: /etc/nginx/nginx.conf
         owner: root
         group: root
@@ -141,7 +136,7 @@
     - name: Install Nginx security headers snippet
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-security-headers.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/marcelwalder-security-headers.conf"
         dest: /etc/nginx/snippets/marcelwalder-security-headers.conf
         owner: root
         group: root
@@ -151,7 +146,7 @@
     - name: Install Nginx bot protection and probe filter snippet
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-bot-protection.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/marcelwalder-bot-protection.conf"
         dest: /etc/nginx/snippets/marcelwalder-bot-protection.conf
         owner: root
         group: root
@@ -161,7 +156,7 @@
     - name: Install Nginx Uptime Kuma proxy snippet
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-uptime-kuma-proxy.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/marcelwalder-uptime-kuma-proxy.conf"
         dest: /etc/nginx/snippets/marcelwalder-uptime-kuma-proxy.conf
         owner: root
         group: root
@@ -171,7 +166,7 @@
     - name: Install Nginx HTTP rate-limit and scanner map config
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-rate-limit.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/marcelwalder-rate-limit.conf"
         dest: /etc/nginx/conf.d/marcelwalder-rate-limit.conf
         owner: root
         group: root
@@ -181,7 +176,7 @@
     - name: Install default catch-all Nginx virtual host config
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/00-default-catchall.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/00-default-catchall.conf"
         dest: /etc/nginx/sites-available/00-default-catchall
         owner: root
         group: root
@@ -206,7 +201,7 @@
     - name: Install HTTP ACME bootstrap vhost for domains missing certificates
       become: true
       ansible.builtin.template:
-        src: "{{ playbook_dir }}/../files/nginx/acme-bootstrap.conf.j2"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/acme-bootstrap.conf.j2"
         dest: "/etc/nginx/sites-available/{{ item.item.site_file }}"
         owner: root
         group: root
@@ -261,7 +256,7 @@
     - name: Install marcelwalder.eu Nginx virtual host config
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/marcelwalder.eu.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/marcelwalder.eu.conf"
         dest: /etc/nginx/sites-available/marcelwalder.eu
         owner: root
         group: root
@@ -279,7 +274,7 @@
     - name: Install status.marcelwalder.eu Nginx reverse-proxy virtual host config
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/status.marcelwalder.eu.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/status.marcelwalder.eu.conf"
         dest: /etc/nginx/sites-available/status.marcelwalder.eu
         owner: root
         group: root
@@ -297,7 +292,7 @@
     - name: Install mail.marcelwalder.eu Nginx reverse-proxy virtual host config
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/mail.marcelwalder.eu.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/mail.marcelwalder.eu.conf"
         dest: /etc/nginx/sites-available/mail
         owner: root
         group: root
@@ -315,7 +310,7 @@
     - name: Deploy BIMI SVG avatar concepts to /var/www/mail
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/web/bimi/{{ item }}"
+        src: "{{ (playbook_dir | dirname) }}/files/web/bimi/{{ item }}"
         dest: "/var/www/mail/{{ item }}"
         owner: root
         group: root
@@ -328,7 +323,7 @@
     - name: Seed default BIMI avatar.svg if not already present
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/web/bimi/concept1.svg"
+        src: "{{ (playbook_dir | dirname) }}/files/web/bimi/concept1.svg"
         dest: /var/www/mail/avatar.svg
         owner: root
         group: root
@@ -338,7 +333,7 @@
     - name: Deploy MTA-STS policy file
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/web/mta-sts.txt"
+        src: "{{ (playbook_dir | dirname) }}/files/web/mta-sts.txt"
         dest: /var/www/mta-sts/.well-known/mta-sts.txt
         owner: root
         group: root
@@ -347,7 +342,7 @@
     - name: Install mta-sts.marcelwalder.eu Nginx virtual host config
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/mta-sts.marcelwalder.eu.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/mta-sts.marcelwalder.eu.conf"
         dest: /etc/nginx/sites-available/mta-sts
         owner: root
         group: root
@@ -365,7 +360,7 @@
     - name: Install internal-only GoAccess & node_exporter Nginx vhost
       become: true
       ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/marcelwalder-internal-admin.conf"
+        src: "{{ (playbook_dir | dirname) }}/files/nginx/marcelwalder-internal-admin.conf"
         dest: /etc/nginx/sites-available/marcelwalder-internal-admin
         owner: root
         group: root
@@ -392,6 +387,11 @@
           - "--chmod=D755,F644"
 
   handlers:
+    - name: Apply WireGuard sysctl
+      become: true
+      ansible.builtin.command: sysctl -p /etc/sysctl.d/99-marcelwalder-wireguard.conf
+      changed_when: true
+
     - name: Run nginx config test
       listen: "Validate and reload nginx"
       become: true

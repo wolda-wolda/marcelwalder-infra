@@ -1,7 +1,7 @@
 ---
 - name: Configure prometheus-node-exporter to bind localhost only
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/monitoring/prometheus-node-exporter.default"
+    src: "{{ (playbook_dir | dirname) }}/files/monitoring/prometheus-node-exporter.default"
     dest: /etc/default/prometheus-node-exporter
     owner: root
     group: root
@@ -27,42 +27,33 @@
 
 - name: Install Uptime Kuma Docker Compose manifest
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/monitoring/uptime-kuma-compose.yml"
+    src: "{{ (playbook_dir | dirname) }}/files/monitoring/uptime-kuma-compose.yml"
     dest: /opt/uptime-kuma/compose.yml
     owner: root
     group: root
     mode: "0644"
-  register: uptime_kuma_compose
+  notify: Upgrade Uptime Kuma container before compose up
 
-- name: Back up data and stop Uptime Kuma before image upgrade
-  ansible.builtin.shell: |
-    set -euo pipefail
-    install -d -m 0700 /var/backups
-    tar -czf /var/backups/uptime-kuma-pre-upgrade.tar.gz -C /opt/uptime-kuma data
-    docker compose -f /opt/uptime-kuma/compose.yml down
-    docker compose -f /opt/uptime-kuma/compose.yml pull
-  args:
-    executable: /bin/bash
-  when: uptime_kuma_compose.changed
-  changed_when: true
+- name: Flush handlers before starting Uptime Kuma
+  ansible.builtin.meta: flush_handlers
 
 - name: Ensure Uptime Kuma container is running
   ansible.builtin.command: docker compose -f /opt/uptime-kuma/compose.yml up -d --remove-orphans
-  register: uptime_kuma_up
+  register: monitoring_backups_uptime_kuma_up
   changed_when: >-
-    'Started' in uptime_kuma_up.stderr
-    or 'Created' in uptime_kuma_up.stderr
-    or 'Recreated' in uptime_kuma_up.stderr
+    'Started' in monitoring_backups_uptime_kuma_up.stderr
+    or 'Created' in monitoring_backups_uptime_kuma_up.stderr
+    or 'Recreated' in monitoring_backups_uptime_kuma_up.stderr
 
 - name: Wait for Uptime Kuma HTTP backend on localhost:3001
   ansible.builtin.uri:
     url: http://127.0.0.1:3001/
     status_code: [200, 302]
     follow_redirects: none
-  register: kuma_health
+  register: monitoring_backups_kuma_health
   retries: 20
   delay: 5
-  until: kuma_health.status is defined and kuma_health.status in [200, 302]
+  until: monitoring_backups_kuma_health.status is defined and monitoring_backups_kuma_health.status in [200, 302]
 
 - name: Remove temporary unencrypted Uptime Kuma pre-upgrade archive
   ansible.builtin.file:
@@ -208,13 +199,13 @@
     PY
   args:
     executable: /bin/bash
-  register: kuma_smtp_sync
-  changed_when: "'CHANGED' in kuma_smtp_sync.stdout or 'HEARTBEAT_WRITTEN' in kuma_smtp_sync.stdout"
+  register: monitoring_backups_kuma_smtp_sync
+  changed_when: "'CHANGED' in monitoring_backups_kuma_smtp_sync.stdout or 'HEARTBEAT_WRITTEN' in monitoring_backups_kuma_smtp_sync.stdout"
   no_log: true
 
 - name: Restart Uptime Kuma to load updated notification and Push monitor config
   ansible.builtin.command: docker restart uptime-kuma
-  when: "'CHANGED' in kuma_smtp_sync.stdout"
+  when: "'CHANGED' in monitoring_backups_kuma_smtp_sync.stdout"
   changed_when: true
 
 - name: Wait for Uptime Kuma HTTP backend after notification sync
@@ -222,11 +213,11 @@
     url: http://127.0.0.1:3001/
     status_code: [200, 302]
     follow_redirects: none
-  register: kuma_notif_health
+  register: monitoring_backups_kuma_notif_health
   retries: 20
   delay: 5
-  until: kuma_notif_health.status is defined and kuma_notif_health.status in [200, 302]
-  when: "'CHANGED' in kuma_smtp_sync.stdout"
+  until: monitoring_backups_kuma_notif_health.status is defined and monitoring_backups_kuma_notif_health.status in [200, 302]
+  when: "'CHANGED' in monitoring_backups_kuma_smtp_sync.stdout"
 
 - name: Ping Restic Push monitor heartbeat once after setup
   ansible.builtin.shell: |
@@ -236,13 +227,13 @@
     fi
   args:
     executable: /bin/bash
-  when: "'CHANGED' in kuma_smtp_sync.stdout or 'HEARTBEAT_WRITTEN' in kuma_smtp_sync.stdout"
+  when: "'CHANGED' in monitoring_backups_kuma_smtp_sync.stdout or 'HEARTBEAT_WRITTEN' in monitoring_backups_kuma_smtp_sync.stdout"
   changed_when: false
   no_log: true
 
 - name: Install monitoring, alert transport, GoAccess, and Restic scripts
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/{{ item.src }}"
+    src: "{{ (playbook_dir | dirname) }}/files/{{ item.src }}"
     dest: "{{ item.dest }}"
     owner: root
     group: root
@@ -280,7 +271,7 @@
 
 - name: Install weekly host maintenance script, logrotate, and quota-watchdog
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/{{ item.src }}"
+    src: "{{ (playbook_dir | dirname) }}/files/{{ item.src }}"
     dest: "{{ item.dest }}"
     owner: root
     group: root
@@ -298,7 +289,7 @@
 
 - name: Install monitoring, backup, update, and alerting systemd units and timers
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/systemd/{{ item }}"
+    src: "{{ (playbook_dir | dirname) }}/files/systemd/{{ item }}"
     dest: "/etc/systemd/system/{{ item }}"
     owner: root
     group: root
@@ -368,5 +359,5 @@
     fi
   args:
     executable: /bin/bash
-  register: root_crontab_dedup
-  changed_when: "'REMOVED' in root_crontab_dedup.stdout"
+  register: monitoring_backups_root_crontab_dedup
+  changed_when: "'REMOVED' in monitoring_backups_root_crontab_dedup.stdout"

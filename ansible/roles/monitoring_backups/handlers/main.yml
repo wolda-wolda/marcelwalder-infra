@@ -1,0 +1,11 @@
+---
+- name: Upgrade Uptime Kuma container before compose up
+  ansible.builtin.shell: |
+    set -euo pipefail
+    install -d -m 0700 /var/backups
+    tar -czf /var/backups/uptime-kuma-pre-upgrade.tar.gz -C /opt/uptime-kuma data
+    docker compose -f /opt/uptime-kuma/compose.yml down
+    docker compose -f /opt/uptime-kuma/compose.yml pull
+  args:
+    executable: /bin/bash
+  changed_when: true

@@ -9,7 +9,7 @@
 
 - name: Install sanctioned-country list configuration
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/geoblock/geoblock.conf"
+    src: "{{ (playbook_dir | dirname) }}/files/geoblock/geoblock.conf"
     dest: /etc/marcelwalder/geoblock.conf
     owner: root
     group: root
@@ -18,7 +18,7 @@
 
 - name: Install geoblock update script (nftables + Nginx geo)
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/geoblock/update-geoblock.sh"
+    src: "{{ (playbook_dir | dirname) }}/files/geoblock/update-geoblock.sh"
     dest: /usr/local/sbin/marcelwalder-geoblock-update
     owner: root
     group: root
@@ -27,7 +27,7 @@
 
 - name: Install geoblock systemd units and weekly refresh timer
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/systemd/{{ item }}"
+    src: "{{ (playbook_dir | dirname) }}/files/systemd/{{ item }}"
     dest: "/etc/systemd/system/{{ item }}"
     owner: root
     group: root
@@ -57,23 +57,23 @@
 
 - name: Install native nftables host firewall policy (IPv4 + IPv6 + Oracle metadata guard)
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/firewall/nftables.conf"
+    src: "{{ (playbook_dir | dirname) }}/files/firewall/nftables.conf"
     dest: /etc/nftables.conf
     owner: root
     group: root
     mode: "0644"
     validate: nft -c -f %s
-  register: nftables_cfg
+  register: firewall_nftables_cfg
 
 - name: Check whether nftables table inet marcelwalder_host is loaded
   ansible.builtin.command: nft list table inet marcelwalder_host
-  register: nft_host_table
+  register: firewall_nft_host_table
   changed_when: false
   failed_when: false
 
 - name: Apply native nftables host firewall policy
   ansible.builtin.command: nft -f /etc/nftables.conf
-  when: nftables_cfg.changed or nft_host_table.rc != 0
+  when: firewall_nftables_cfg.changed or firewall_nft_host_table.rc != 0
   changed_when: true
 
 - name: Enable and start native nftables service
@@ -84,7 +84,7 @@
 
 - name: Install custom Fail2ban Nginx probe-drop filter
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/fail2ban/nginx-probe-drop.conf"
+    src: "{{ (playbook_dir | dirname) }}/files/fail2ban/nginx-probe-drop.conf"
     dest: /etc/fail2ban/filter.d/nginx-probe-drop.conf
     owner: root
     group: root
@@ -93,7 +93,7 @@
 
 - name: Install Fail2ban jail configuration using native nftables
   ansible.builtin.copy:
-    src: "{{ role_path }}/../../files/fail2ban/marcelwalder.local"
+    src: "{{ (playbook_dir | dirname) }}/files/fail2ban/marcelwalder.local"
     dest: /etc/fail2ban/jail.d/marcelwalder.local
     owner: root
     group: root
@@ -148,5 +148,5 @@
     [ "$changed" -eq 1 ] && echo "FLUSHED" || true
   args:
     executable: /bin/bash
-  register: legacy_iptables_flush
-  changed_when: "'FLUSHED' in legacy_iptables_flush.stdout"
+  register: firewall_legacy_iptables_flush
+  changed_when: "'FLUSHED' in firewall_legacy_iptables_flush.stdout"
