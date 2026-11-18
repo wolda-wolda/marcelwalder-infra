@@ -457,12 +457,12 @@ resource "oci_identity_policy" "opentofu_ci" {
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage ons-family IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage cloudevents-rules IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage alarms IN TENANCY",
-    "ALLOW GROUP 'Default'/'opentofu-ci' to read metrics IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to manage usage-budgets IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to read users IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to read groups IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to read policies IN TENANCY",
-    "ALLOW GROUP 'Default'/'opentofu-ci' to read domains IN TENANCY"
+    "ALLOW GROUP 'Default'/'opentofu-ci' to read domains IN TENANCY",
+    "ALLOW GROUP 'Default'/'opentofu-ci' to read metrics IN TENANCY"
   ]
 
   lifecycle {
