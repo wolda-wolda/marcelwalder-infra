@@ -140,6 +140,9 @@ jobs:
           echo "GET https://status.marcelwalder.eu/socket.io/ returned HTTP $socket_code"
           [ "$socket_code" = "403" ]
 
+          mail_code=$(curl -sS -o /dev/null -w "%{http_code}" https://mail.marcelwalder.eu/)
+          echo "GET https://mail.marcelwalder.eu/ returned HTTP $mail_code"
+          [ "$mail_code" = "200" ]
           mail_headers=$(curl -fsS -I https://mail.marcelwalder.eu/)
           echo "$mail_headers" | grep -qi "^strict-transport-security:"
 
@@ -147,6 +150,9 @@ jobs:
           echo "GET https://mail.marcelwalder.eu/?admin returned HTTP $mail_admin_code"
           [ "$mail_admin_code" = "403" ]
 
+          mta_code=$(curl -sS -o /dev/null -w "%{http_code}" https://mta-sts.marcelwalder.eu/.well-known/mta-sts.txt)
+          echo "GET https://mta-sts.marcelwalder.eu/.well-known/mta-sts.txt returned HTTP $mta_code"
+          [ "$mta_code" = "200" ]
           mta_headers=$(curl -fsS -I https://mta-sts.marcelwalder.eu/.well-known/mta-sts.txt)
           echo "$mta_headers" | grep -qi "^strict-transport-security:"
 

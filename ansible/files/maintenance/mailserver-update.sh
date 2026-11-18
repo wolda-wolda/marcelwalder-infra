@@ -68,6 +68,7 @@ if [ -f /opt/snappymail/docker-compose.yml ]; then
         ERROR_MSG="${ERROR_MSG}Failed to start SnappyMail container.\n"
     }
 fi
+docker exec snappymail sh -c 'apk update -q && apk upgrade --no-cache -q nginx && nginx -s reload' >/dev/null 2>&1 || true
 NEW_SNAPPY_IMAGE=$(docker inspect --format='{{.Image}}' snappymail 2>/dev/null || echo "none")
 if [ "$OLD_SNAPPY_IMAGE" != "$NEW_SNAPPY_IMAGE" ]; then
     UPDATES_MADE="${UPDATES_MADE}- SnappyMail updated\n"

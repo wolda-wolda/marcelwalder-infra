@@ -17,6 +17,15 @@
         group: www-data
         mode: "0755"
 
+    - name: Ensure Nginx cache directory is owned by www-data
+      become: true
+      ansible.builtin.file:
+        path: /var/cache/nginx
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0755"
+
     - name: Ensure Nginx, Certbot webroot, and internal analytics directories exist
       become: true
       ansible.builtin.file:
@@ -26,6 +35,9 @@
         group: root
         mode: "0755"
       loop:
+        - /etc/nginx/modules-enabled
+        - /etc/nginx/sites-available
+        - /etc/nginx/sites-enabled
         - /etc/nginx/snippets
         - /etc/nginx/geo
         - /var/www/certbot-status
@@ -46,20 +58,21 @@
       ansible.builtin.command: sysctl -p /etc/sysctl.d/99-marcelwalder-wireguard.conf
       when: wireguard_sysctl.changed
 
-    - name: Disable Nginx server version tokens in main configuration
+    - name: Install hardened main Nginx configuration
       become: true
-      ansible.builtin.lineinfile:
-        path: /etc/nginx/nginx.conf
-        regexp: '^\s*#?\s*server_tokens\s+'
-        line: "\tserver_tokens off;"
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/nginx/nginx.conf"
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: "0644"
       notify: Validate and reload nginx
 
-    - name: Enforce TLSv1.2 and TLSv1.3 only in main Nginx configuration
+    - name: Remove upstream nginx.org default HTTP vhost if present
       become: true
-      ansible.builtin.lineinfile:
-        path: /etc/nginx/nginx.conf
-        regexp: '^\s*ssl_protocols\s+'
-        line: "\tssl_protocols TLSv1.2 TLSv1.3;"
+      ansible.builtin.file:
+        path: /etc/nginx/conf.d/default.conf
+        state: absent
       notify: Validate and reload nginx
 
     - name: Ensure placeholder Nginx geo CIDR file exists before config test
