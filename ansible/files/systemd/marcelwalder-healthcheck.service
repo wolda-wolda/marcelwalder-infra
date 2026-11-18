@@ -1,0 +1,7 @@
+[Unit]
+Description=Continuous health check and self-healing watchdog for marcelwalder.eu stack
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/marcelwalder-healthcheck

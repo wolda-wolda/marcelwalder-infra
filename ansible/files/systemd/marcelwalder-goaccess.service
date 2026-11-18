@@ -1,5 +1,6 @@
 [Unit]
 Description=Generate static GoAccess HTML analytics report from Nginx logs
+OnFailure=marcelwalder-alert@%n.service
 
 [Service]
 Type=oneshot

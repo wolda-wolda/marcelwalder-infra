@@ -13,14 +13,7 @@ echo "=================================================="
 send_notification() {
     local subject="$1"
     local body="$2"
-    docker exec -i mailserver sendmail -f info@marcelwalder.eu "$RECIPIENT" <<MAIL_EOF || true
-From: info@marcelwalder.eu
-To: $RECIPIENT
-Subject: $subject
-Date: $(date -R)
-
-$body
-MAIL_EOF
+    ALERT_RECIPIENT="$RECIPIENT" /usr/local/sbin/marcelwalder-send-alert "$subject" "$body" || true
 }
 
 HEALTH_OK=true
@@ -38,8 +31,22 @@ else
     if ! apt-get upgrade -y -q; then
         HEALTH_OK=false
         ERROR_MSG="${ERROR_MSG}apt-get upgrade failed.\n"
-    elif [ "$UPGRADABLE" -gt 0 ]; then
-        UPDATES_MADE="${UPDATES_MADE}- Host OS packages upgraded (${UPGRADABLE})\n"
+    else
+        if [ "$UPGRADABLE" -gt 0 ]; then
+            UPDATES_MADE="${UPDATES_MADE}- Host OS packages upgraded (${UPGRADABLE})\n"
+        fi
+        if [ -f /etc/nginx/conf.d/default.conf ]; then
+            rm -f /etc/nginx/conf.d/default.conf
+        fi
+        if [ -f /etc/logrotate.d/nginx ]; then
+            sed -i -E 's/create[[:space:]]+[0-9]+[[:space:]]+nginx[[:space:]]+adm/create 640 www-data adm/' /etc/logrotate.d/nginx || true
+        fi
+        if nginx -t >/dev/null 2>&1; then
+            systemctl reload nginx || true
+        else
+            HEALTH_OK=false
+            ERROR_MSG="${ERROR_MSG}nginx -t configuration check failed after package upgrade.\n"
+        fi
     fi
 fi
 apt-get autoremove -y -q || true

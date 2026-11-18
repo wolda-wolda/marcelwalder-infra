@@ -2,6 +2,7 @@
 Description=Update sanctioned country CIDRs for nftables and Nginx
 Wants=network-online.target
 After=network-online.target
+OnFailure=marcelwalder-alert@%n.service
 
 [Service]
 Type=oneshot

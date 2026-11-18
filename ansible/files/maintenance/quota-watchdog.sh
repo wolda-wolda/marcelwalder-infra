@@ -9,14 +9,7 @@ RELAY_90=2790
 send_alert() {
     local subject="$1"
     local body="$2"
-    docker exec -i mailserver sendmail -f info@marcelwalder.eu "$RECIPIENT" <<MAIL_EOF
-From: info@marcelwalder.eu
-To: $RECIPIENT
-Subject: $subject
-Date: $(date -R)
-
-$body
-MAIL_EOF
+    ALERT_RECIPIENT="$RECIPIENT" /usr/local/sbin/marcelwalder-send-alert "$subject" "$body" || true
 }
 
 # 1. Monthly Relay Volume Check

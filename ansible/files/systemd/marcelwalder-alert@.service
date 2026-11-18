@@ -1,0 +1,7 @@
+[Unit]
+Description=Send instant email alert on failed systemd service (%i)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/marcelwalder-systemd-alert %i

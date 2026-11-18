@@ -2,6 +2,7 @@
 Description=Encrypted Restic offsite backup to OCI Object Storage
 Wants=network-online.target
 After=network-online.target
+OnFailure=marcelwalder-alert@%n.service
 
 [Service]
 Type=oneshot

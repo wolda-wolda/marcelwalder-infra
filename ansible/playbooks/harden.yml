@@ -175,7 +175,19 @@
         mode: "0755"
       notify: Refresh geoblock rules
 
-    - name: Install geoblock, GoAccess, and Restic systemd units and timers
+    - name: Install monitoring, alert transport, geoblock, GoAccess, and Restic scripts
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../files/{{ item.src }}"
+        dest: "{{ item.dest }}"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - { src: monitoring/send-alert.py, dest: /usr/local/sbin/marcelwalder-send-alert }
+        - { src: monitoring/systemd-alert.sh, dest: /usr/local/sbin/marcelwalder-systemd-alert }
+        - { src: monitoring/health-watchdog.sh, dest: /usr/local/sbin/marcelwalder-healthcheck }
+
+    - name: Install geoblock, GoAccess, Restic, alert, and healthcheck systemd units and timers
       ansible.builtin.copy:
         src: "{{ playbook_dir }}/../files/systemd/{{ item }}"
         dest: "/etc/systemd/system/{{ item }}"
@@ -183,11 +195,14 @@
         group: root
         mode: "0644"
       loop:
+        - marcelwalder-alert@.service
         - marcelwalder-geoblock.service
         - marcelwalder-geoblock-update.service
         - marcelwalder-geoblock-update.timer
         - marcelwalder-goaccess.service
         - marcelwalder-goaccess.timer
+        - marcelwalder-healthcheck.service
+        - marcelwalder-healthcheck.timer
         - marcelwalder-restic-backup.service
         - marcelwalder-restic-backup.timer
       notify: Reload systemd daemon
@@ -315,6 +330,128 @@
       ansible.builtin.file:
         path: /var/backups/uptime-kuma-pre-upgrade.tar.gz
         state: absent
+
+    - name: Configure default OCI Email Delivery SMTP alerting in Uptime Kuma
+      ansible.builtin.shell: |
+        set -euo pipefail
+        python3 - <<'PY'
+        import json, os, re, sqlite3
+
+        db_path = "/opt/uptime-kuma/data/kuma.db"
+        sasl_path = "/opt/mailserver/config/postfix-sasl-password.cf"
+        if not (os.path.exists(db_path) and os.path.exists(sasl_path)):
+            raise SystemExit(0)
+
+        host, port, username, password = None, 587, None, None
+        with open(sasl_path, "r", encoding="utf-8") as f:
+            for raw in f:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split(None, 1)
+                if len(parts) == 2 and ":" in parts[1]:
+                    target, creds = parts
+                    username, password = creds.split(":", 1)
+                    m = re.match(r"^\[?([^\]]+)\]?:(\d+)$", target)
+                    host = m.group(1) if m else target.strip("[]")
+                    port = int(m.group(2)) if m else 587
+                    break
+        if not (host and username and password):
+            raise SystemExit(0)
+
+        conn = sqlite3.connect(db_path, timeout=15)
+        cur = conn.cursor()
+        user_row = cur.execute("SELECT id FROM user ORDER BY id LIMIT 1").fetchone()
+        if not user_row:
+            conn.close()
+            raise SystemExit(0)
+        user_id = user_row[0]
+
+        desired_cfg = {
+            "name": "OCI Email Relay",
+            "type": "smtp",
+            "isDefault": True,
+            "applyExisting": True,
+            "smtpHost": host,
+            "smtpPort": port,
+            "smtpSecure": False,
+            "smtpIgnoreTLSError": False,
+            "smtpIgnoreSTARTTLS": False,
+            "smtpUsername": username,
+            "smtpPassword": password,
+            "smtpFrom": "Uptime Kuma <info@marcelwalder.eu>",
+            "smtpTo": "marcelwalder12@gmail.com",
+            "customSubject": "",
+            "customBody": "",
+            "htmlBody": False,
+        }
+        desired_json = json.dumps(desired_cfg, separators=(",", ":"))
+        changed = False
+
+        existing = cur.execute(
+            "SELECT id, active, is_default, config FROM notification WHERE name = 'OCI Email Relay' ORDER BY id LIMIT 1"
+        ).fetchone()
+        if existing:
+            notif_id, active, is_default, cur_cfg = existing
+            try:
+                cur_parsed = json.loads(cur_cfg) if cur_cfg else {}
+            except Exception:
+                cur_parsed = {}
+            if cur_parsed != desired_cfg or active != 1 or is_default != 1:
+                cur.execute(
+                    "UPDATE notification SET active = 1, is_default = 1, config = ? WHERE id = ?",
+                    (desired_json, notif_id),
+                )
+                changed = True
+        else:
+            cur.execute(
+                "INSERT INTO notification (name, active, user_id, is_default, config) VALUES (?, 1, ?, 1, ?)",
+                ("OCI Email Relay", user_id, desired_json),
+            )
+            notif_id = cur.lastrowid
+            changed = True
+
+        monitor_ids = [r[0] for r in cur.execute("SELECT id FROM monitor").fetchall()]
+        linked = {
+            r[0]
+            for r in cur.execute(
+                "SELECT monitor_id FROM monitor_notification WHERE notification_id = ?",
+                (notif_id,),
+            ).fetchall()
+        }
+        for mid in monitor_ids:
+            if mid not in linked:
+                cur.execute(
+                    "INSERT INTO monitor_notification (monitor_id, notification_id) VALUES (?, ?)",
+                    (mid, notif_id),
+                )
+                changed = True
+
+        if changed:
+            conn.commit()
+            print("CHANGED")
+        conn.close()
+        PY
+      args:
+        executable: /bin/bash
+      register: kuma_smtp_sync
+      changed_when: "'CHANGED' in kuma_smtp_sync.stdout"
+      no_log: true
+
+    - name: Restart Uptime Kuma to load updated SMTP notification config
+      ansible.builtin.command: docker restart uptime-kuma
+      when: kuma_smtp_sync.changed
+
+    - name: Wait for Uptime Kuma HTTP backend after notification sync
+      ansible.builtin.uri:
+        url: http://127.0.0.1:3001/
+        status_code: [200, 302]
+        follow_redirects: none
+      register: kuma_notif_health
+      retries: 20
+      delay: 5
+      until: kuma_notif_health.status is defined and kuma_notif_health.status in [200, 302]
+      when: kuma_smtp_sync.changed
 
     - name: Ensure mailserver and SnappyMail directories exist
       ansible.builtin.file:
@@ -764,6 +901,12 @@
         - rpcbind.socket
         - rpcbind.service
       failed_when: false
+
+    - name: Enable and start continuous 2-minute service health watchdog timer
+      ansible.builtin.systemd_service:
+        name: marcelwalder-healthcheck.timer
+        enabled: true
+        state: started
 
   handlers:
     - name: Run fail2ban config test

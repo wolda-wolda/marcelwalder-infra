@@ -4,6 +4,7 @@ DefaultDependencies=no
 After=local-fs.target
 Before=network-pre.target
 Wants=network-pre.target
+OnFailure=marcelwalder-alert@%n.service
 
 [Service]
 Type=oneshot
