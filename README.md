@@ -7,38 +7,42 @@ Monorepo managing OCI cloud infrastructure, Porkbun DNS, server configuration, a
 ```text
 marcelwalder-infra/
 ├── .github/workflows/
-│   ├── infra.yml           # OpenTofu fmt, validate, PR plan comment, and gated apply
-│   └── deploy-site.yml     # Self-hosted/CSP hygiene guard + Ansible site deploy + smoke check
+│   ├── infra.yml           # OpenTofu fmt, tflint, validate, weekly drift plan, PR plan comment, and gated apply
+│   └── deploy-site.yml     # Self-hosted/CSP/Compose/ansible-lint guard, pinned-SSH Ansible deploy + smoke check
+├── docs/
+│   └── DR-RUNBOOK.md       # Backup verification, cold-start VM rebuild, and opentofu-ci rotation runbook
 ├── infra/
 │   ├── modules/
 │   │   ├── network/        # VCN, IGW, default route/security list, subnets, composable NSGs
 │   │   ├── compute/        # Map-driven OCI VM instances + optional reserved public IPs
 │   │   └── dns/            # Porkbun DNS record module
 │   └── live/
-│       ├── prod/           # Primary OCI stack (VCN, VM, buckets, backup policy, Email Delivery, alarms, ONS, budget, IAM)
+│       ├── prod/           # Primary OCI stack (VCN, NSG, VM, versioned+lifecycle buckets, backup policy, Email Delivery, alarms, ONS, budget, least-privilege CI IAM)
 │       └── dns/            # Porkbun DNS stack (consumes prod public IPs via remote state)
 ├── ansible/
 │   ├── inventory/hosts.yml
+│   ├── roles/              # Modular roles: base_os, firewall, ssh_wireguard, mail_stack, monitoring_backups
 │   ├── files/
 │   │   ├── mailserver/     # Docker-Mailserver & SnappyMail compose manifests and mail configs
-│   │   ├── nginx/          # Hardened Nginx main config, snippets, and site vhosts
+│   │   ├── nginx/          # Hardened Nginx main config, snippets, ACME bootstrap template, and site vhosts
 │   │   └── web/            # BIMI SVG assets and MTA-STS policy
 │   └── playbooks/
-│       ├── site.yml        # Sync site/, BIMI/MTA-STS assets, Nginx vhosts, and reload Nginx
-│       └── harden.yml      # Host hardening, mail/monitoring stacks, backups, firewall, and WireGuard
+│       ├── site.yml        # Multi-domain ACME bootstrap, sync site/, BIMI/MTA-STS assets, Nginx vhosts
+│       ├── harden.yml      # Role-based VM hardening (native nftables, Fail2ban, WireGuard, mail, monitoring, Restic)
+│       └── restore.yml     # Cold-start Restic S3 restore of /etc/letsencrypt, mail, SnappyMail, Kuma, and WireGuard
 └── site/                   # Self-hosted static CV bundle (zero external font/avatar requests)
 ```
 
 ## Architecture Highlights
 
-- **OpenTofu + OCI Object Storage Backend:** State is stored in the private, versioned OCI Object Storage bucket `tfstate-marcelwalder-prod` (`eu-frankfurt-1`, also tracked with `prevent_destroy = true`) using S3 compatibility and **client-side AES-GCM encryption** (`encryption.tf`).
-- **Complete OCI Operational Guardrails:** `infra/live/prod` manages the `backups-marcelwalder-prod` and `tfstate-marcelwalder-prod` buckets, `Always-Free-Mail-Backup-Policy` boot volume schedule, OCI Email Delivery (`marcelwalder.eu` domain, `dkim1`, approved senders), `Free-Tier-Quota-Alerts` ONS topic/subscription, backup completion event rule, Always Free down/idle-reclaim monitoring alarms, `Zero-Spend-Guard` budget/alert rules, and `Tenant Admin Policy`.
-- **Extensible Multi-VM Compute:** `infra/live/prod/topology.auto.tfvars` defines `instances` as a map. Adding another Always Free ARM or micro VM only requires adding a map entry (plus an NSG in `nsgs` if custom ports are needed).
+- **OpenTofu + OCI Object Storage Backend:** State is stored in private, versioned OCI Object Storage (`tfstate-marcelwalder-prod`, `eu-frankfurt-1`, `prevent_destroy = true`) with native S3 lockfiles (`use_lockfile = true`), bucket object lifecycle expiration (30-day non-current versions, 7-day aborted multipart uploads), committed multi-platform `.terraform.lock.hcl` files, weekly drift detection, and **client-side AES-GCM encryption** (`encryption.tf`).
+- **Complete OCI Operational Guardrails:** `infra/live/prod` manages the `backups-marcelwalder-prod` and `tfstate-marcelwalder-prod` buckets (with lifecycle policies), `Mail-Server-NSG` per-instance firewalling, `Always-Free-Mail-Backup-Policy`, OCI Email Delivery (`marcelwalder.eu` domain, `dkim1`, approved senders), `Free-Tier-Quota-Alerts` ONS topic/subscription, modern `condition_details` backup completion events, Always Free down/idle-reclaim monitoring alarms, `Zero-Spend-Guard` budget/alert rules, and least-privilege `opentofu-ci` IAM user/group/policy.
+- **Native `nftables` & All-Systemd Automation:** Host firewalling and Fail2ban (`banaction = nftables[type=multiport]`) run natively on `nftables` alongside country geoblocking (`marcelwalder_geoblock`) while preserving Docker `iptables-nft` chains and the Oracle `169.254.0.0/16` metadata guard. All scheduled jobs (OS patching, relay quota watchdog, daily encrypted Restic S3 backup + Uptime Kuma Push dead-man's switch, weekly `restic check --read-data-subset=5%`, geoblock refresh, GoAccess reports, and 2-minute self-healing watchdog) run as systemd timers with `OnFailure=` email alerts and capped `journald` storage (`SystemMaxUse=200M`).
+- **Extensible Multi-VM Compute & DR Ready:** `infra/live/prod/topology.auto.tfvars` defines `instances` as a map. Cold-start rebuilds use `ansible/playbooks/restore.yml` + `harden.yml` + `site.yml` per [docs/DR-RUNBOOK.md](docs/DR-RUNBOOK.md).
 - **Automated DNS Sync:** `infra/live/dns` reads `instance_public_ips` directly from `prod/terraform.tfstate` via `terraform_remote_state` and includes `imports.tf` for existing `marcelwalder.eu` records (`ha.marcelwalder.eu` is intentionally managed by a separate Home Assistant repository).
 - **Strict GitOps & Automated Dependency Updates:** Container images (`docker-mailserver`, `snappymail`, `uptime-kuma`) are pinned to explicit versions and SHA256 digests in `ansible/files/` and reconciled by Ansible on deploy. [renovate.json](renovate.json) tracks weekly updates for GitHub Actions SHA pins, OpenTofu CLI/providers (against `registry.opentofu.org`), and Docker Compose digests.
-- **Unattended Host Patching:** `ansible/playbooks/harden.yml` configures daily security-only `unattended-upgrades` (`ansible/files/apt/`, blacklisting `docker-ce*`, `containerd.io`, and `nginx*` from background restarts and keeping `Automatic-Reboot "false"`), paired with scheduled Sunday host upgrades, Nginx config hygiene, and health verification in `ansible/files/maintenance/mailserver-update.sh`.
-- **4-Layer Failure Alerting:** Real-time inbox alerts via direct OCI Email Delivery (`marcelwalder-send-alert`) from (1) Uptime Kuma SMTP notifications across all public & mail monitors, (2) a 2-minute self-healing host watchdog (`marcelwalder-healthcheck.timer`), (3) systemd `OnFailure=marcelwalder-alert@%n.service` hooks on backup/geoblock/analytics units, and (4) OCI Cloud Monitoring (`Always-Free-Instance-Down-Guard`) when the VM itself is unreachable.
-- **GDPR & CSP Guardrails:** `.github/workflows/deploy-site.yml` fails if external Google Fonts / GitHub avatar URLs or inline `<script>` blocks appear in `site/`, then deploys via Ansible and smoke-tests live HTTPS headers.
+- **Unattended Host Patching & Compliance CI:** `base_os` configures daily security-only `unattended-upgrades` (`ansible/files/apt/`, blacklisting `docker-ce*`, `containerd.io`, and `nginx*` from background restarts and keeping `Automatic-Reboot "false"`), paired with weekly `marcelwalder-os-update.timer` patching. PRs run `ansible-lint`, `tflint`, Compose validation, and asset/CSP checks; deploys pin the VM SSH key via `ansible/files/ssh/known_hosts` and skip `harden.yml` on `site/`-only updates.
+- **4-Layer Failure Alerting + Dead-Man's Switch:** Real-time inbox alerts via direct OCI Email Delivery (`marcelwalder-send-alert`) from (1) Uptime Kuma SMTP notifications + backup Push heartbeat monitor, (2) a 2-minute self-healing host watchdog (`marcelwalder-healthcheck.timer`), (3) systemd `OnFailure=marcelwalder-alert@%n.service` hooks across all scheduled timers, and (4) OCI Cloud Monitoring (`Always-Free-Instance-Down-Guard`) when the VM itself is unreachable.
 
 ## Required GitHub Actions Secrets
 

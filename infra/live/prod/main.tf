@@ -146,6 +146,8 @@ resource "oci_objectstorage_object_lifecycle_policy" "backups" {
   namespace = data.oci_objectstorage_namespace.this.namespace
   bucket    = oci_objectstorage_bucket.backups.name
 
+  depends_on = [oci_identity_policy.objectstorage_lifecycle]
+
   rules {
     name        = "expire-previous-versions"
     action      = "DELETE"
@@ -168,6 +170,8 @@ resource "oci_objectstorage_object_lifecycle_policy" "backups" {
 resource "oci_objectstorage_object_lifecycle_policy" "tfstate" {
   namespace = data.oci_objectstorage_namespace.this.namespace
   bucket    = oci_objectstorage_bucket.tfstate.name
+
+  depends_on = [oci_identity_policy.objectstorage_lifecycle]
 
   rules {
     name        = "expire-previous-state-versions"
@@ -451,6 +455,19 @@ resource "oci_identity_policy" "opentofu_ci" {
     "ALLOW GROUP 'Default'/'opentofu-ci' to read groups IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to read policies IN TENANCY",
     "ALLOW GROUP 'Default'/'opentofu-ci' to read domains IN TENANCY"
+  ]
+
+  lifecycle {
+    ignore_changes = [defined_tags]
+  }
+}
+
+resource "oci_identity_policy" "objectstorage_lifecycle" {
+  compartment_id = var.compartment_id
+  name           = "ObjectStorage-Lifecycle-Service-Principal"
+  description    = "Allow OCI Object Storage service principal to execute bucket lifecycle rules"
+  statements = [
+    "ALLOW service objectstorage-eu-frankfurt-1 to manage object-family IN TENANCY"
   ]
 
   lifecycle {

@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Restic repository integrity check
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00 UTC
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target

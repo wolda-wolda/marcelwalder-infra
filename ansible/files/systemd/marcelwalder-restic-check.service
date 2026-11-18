@@ -1,0 +1,12 @@
+[Unit]
+Description=Verify Restic offsite backup repository integrity (5% data subset)
+Wants=network-online.target
+After=network-online.target
+OnFailure=marcelwalder-alert@%n.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/marcelwalder/restic.env
+ExecStart=/usr/bin/restic check --read-data-subset=5%
+Nice=10
+IOSchedulingClass=idle

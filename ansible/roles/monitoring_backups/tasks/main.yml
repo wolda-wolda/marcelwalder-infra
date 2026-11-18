@@ -1,0 +1,372 @@
+---
+- name: Configure prometheus-node-exporter to bind localhost only
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/monitoring/prometheus-node-exporter.default"
+    dest: /etc/default/prometheus-node-exporter
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart node_exporter
+
+- name: Ensure prometheus-node-exporter is enabled and running
+  ansible.builtin.systemd_service:
+    name: prometheus-node-exporter
+    enabled: true
+    state: started
+
+- name: Ensure Uptime Kuma directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /opt/uptime-kuma, mode: "0755" }
+    - { path: /opt/uptime-kuma/data, mode: "0700" }
+
+- name: Install Uptime Kuma Docker Compose manifest
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/monitoring/uptime-kuma-compose.yml"
+    dest: /opt/uptime-kuma/compose.yml
+    owner: root
+    group: root
+    mode: "0644"
+  register: uptime_kuma_compose
+
+- name: Back up data and stop Uptime Kuma before image upgrade
+  ansible.builtin.shell: |
+    set -euo pipefail
+    install -d -m 0700 /var/backups
+    tar -czf /var/backups/uptime-kuma-pre-upgrade.tar.gz -C /opt/uptime-kuma data
+    docker compose -f /opt/uptime-kuma/compose.yml down
+    docker compose -f /opt/uptime-kuma/compose.yml pull
+  args:
+    executable: /bin/bash
+  when: uptime_kuma_compose.changed
+  changed_when: true
+
+- name: Ensure Uptime Kuma container is running
+  ansible.builtin.command: docker compose -f /opt/uptime-kuma/compose.yml up -d --remove-orphans
+  register: uptime_kuma_up
+  changed_when: >-
+    'Started' in uptime_kuma_up.stderr
+    or 'Created' in uptime_kuma_up.stderr
+    or 'Recreated' in uptime_kuma_up.stderr
+
+- name: Wait for Uptime Kuma HTTP backend on localhost:3001
+  ansible.builtin.uri:
+    url: http://127.0.0.1:3001/
+    status_code: [200, 302]
+    follow_redirects: none
+  register: kuma_health
+  retries: 20
+  delay: 5
+  until: kuma_health.status is defined and kuma_health.status in [200, 302]
+
+- name: Remove temporary unencrypted Uptime Kuma pre-upgrade archive
+  ansible.builtin.file:
+    path: /var/backups/uptime-kuma-pre-upgrade.tar.gz
+    state: absent
+
+- name: Configure OCI Email Delivery SMTP alerting and Restic backup Push monitor in Uptime Kuma
+  ansible.builtin.shell: |
+    set -euo pipefail
+    python3 - <<'PY'
+    import json, os, re, secrets, sqlite3
+
+    db_path = "/opt/uptime-kuma/data/kuma.db"
+    sasl_path = "/opt/mailserver/config/postfix-sasl-password.cf"
+    hb_path = "/etc/marcelwalder/restic-heartbeat.url"
+    if not (os.path.exists(db_path) and os.path.exists(sasl_path)):
+        raise SystemExit(0)
+
+    host, port, username, password = None, 587, None, None
+    with open(sasl_path, "r", encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split(None, 1)
+            if len(parts) == 2 and ":" in parts[1]:
+                target, creds = parts
+                username, password = creds.split(":", 1)
+                m = re.match(r"^\[?([^\]]+)\]?:(\d+)$", target)
+                host = m.group(1) if m else target.strip("[]")
+                port = int(m.group(2)) if m else 587
+                break
+    if not (host and username and password):
+        raise SystemExit(0)
+
+    conn = sqlite3.connect(db_path, timeout=15)
+    cur = conn.cursor()
+    user_row = cur.execute("SELECT id FROM user ORDER BY id LIMIT 1").fetchone()
+    if not user_row:
+        conn.close()
+        raise SystemExit(0)
+    user_id = user_row[0]
+
+    desired_cfg = {
+        "name": "OCI Email Relay",
+        "type": "smtp",
+        "isDefault": True,
+        "applyExisting": True,
+        "smtpHost": host,
+        "smtpPort": port,
+        "smtpSecure": False,
+        "smtpIgnoreTLSError": False,
+        "smtpIgnoreSTARTTLS": False,
+        "smtpUsername": username,
+        "smtpPassword": password,
+        "smtpFrom": "Uptime Kuma <info@marcelwalder.eu>",
+        "smtpTo": "marcelwalder12@gmail.com",
+        "customSubject": "",
+        "customBody": "",
+        "htmlBody": False,
+    }
+    desired_json = json.dumps(desired_cfg, separators=(",", ":"))
+    changed = False
+
+    existing = cur.execute(
+        "SELECT id, active, is_default, config FROM notification WHERE name = 'OCI Email Relay' ORDER BY id LIMIT 1"
+    ).fetchone()
+    if existing:
+        notif_id, active, is_default, cur_cfg = existing
+        try:
+            cur_parsed = json.loads(cur_cfg) if cur_cfg else {}
+        except Exception:
+            cur_parsed = {}
+        if cur_parsed != desired_cfg or active != 1 or is_default != 1:
+            cur.execute(
+                "UPDATE notification SET active = 1, is_default = 1, config = ? WHERE id = ?",
+                (desired_json, notif_id),
+            )
+            changed = True
+    else:
+        cur.execute(
+            "INSERT INTO notification (name, active, user_id, is_default, config) VALUES (?, 1, ?, 1, ?)",
+            ("OCI Email Relay", user_id, desired_json),
+        )
+        notif_id = cur.lastrowid
+        changed = True
+
+    push_row = cur.execute(
+        "SELECT id, push_token, interval, active FROM monitor WHERE name = 'Restic Offsite Backup' AND type = 'push' ORDER BY id LIMIT 1"
+    ).fetchone()
+    if push_row:
+        _, push_token, push_interval, push_active = push_row
+        if not push_token:
+            push_token = secrets.token_urlsafe(24)[:32]
+            cur.execute("UPDATE monitor SET push_token = ? WHERE id = ?", (push_token, push_row[0]))
+            changed = True
+        if push_interval != 90000 or push_active != 1:
+            cur.execute("UPDATE monitor SET interval = 90000, active = 1 WHERE id = ?", (push_row[0],))
+            changed = True
+    else:
+        push_token = secrets.token_urlsafe(24)[:32]
+        cur.execute(
+            "INSERT INTO monitor (name, active, user_id, interval, type, maxretries, retry_interval, push_token, description) "
+            "VALUES (?, 1, ?, 90000, 'push', 1, 60, ?, ?)",
+            (
+                "Restic Offsite Backup",
+                user_id,
+                push_token,
+                "Dead-man switch pinged daily after encrypted Restic offsite backup completes.",
+            ),
+        )
+        changed = True
+
+    monitor_ids = [r[0] for r in cur.execute("SELECT id FROM monitor").fetchall()]
+    linked = {
+        r[0]
+        for r in cur.execute(
+            "SELECT monitor_id FROM monitor_notification WHERE notification_id = ?",
+            (notif_id,),
+        ).fetchall()
+    }
+    for mid in monitor_ids:
+        if mid not in linked:
+            cur.execute(
+                "INSERT INTO monitor_notification (monitor_id, notification_id) VALUES (?, ?)",
+                (mid, notif_id),
+            )
+            changed = True
+
+    if changed:
+        conn.commit()
+        print("CHANGED")
+    conn.close()
+
+    hb_url = f"http://127.0.0.1:3001/api/push/{push_token}?status=up&msg=OK"
+    cur_hb = open(hb_path, "r", encoding="utf-8").read().strip() if os.path.exists(hb_path) else ""
+    if cur_hb != hb_url:
+        fd = os.open(hb_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(hb_url + "\n")
+        os.chmod(hb_path, 0o600)
+        print("HEARTBEAT_WRITTEN")
+    PY
+  args:
+    executable: /bin/bash
+  register: kuma_smtp_sync
+  changed_when: "'CHANGED' in kuma_smtp_sync.stdout or 'HEARTBEAT_WRITTEN' in kuma_smtp_sync.stdout"
+  no_log: true
+
+- name: Restart Uptime Kuma to load updated notification and Push monitor config
+  ansible.builtin.command: docker restart uptime-kuma
+  when: "'CHANGED' in kuma_smtp_sync.stdout"
+  changed_when: true
+
+- name: Wait for Uptime Kuma HTTP backend after notification sync
+  ansible.builtin.uri:
+    url: http://127.0.0.1:3001/
+    status_code: [200, 302]
+    follow_redirects: none
+  register: kuma_notif_health
+  retries: 20
+  delay: 5
+  until: kuma_notif_health.status is defined and kuma_notif_health.status in [200, 302]
+  when: "'CHANGED' in kuma_smtp_sync.stdout"
+
+- name: Ping Restic Push monitor heartbeat once after setup
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if [ -s /etc/marcelwalder/restic-heartbeat.url ]; then
+      curl -fsS --max-time 10 "$(cat /etc/marcelwalder/restic-heartbeat.url)" >/dev/null
+    fi
+  args:
+    executable: /bin/bash
+  when: "'CHANGED' in kuma_smtp_sync.stdout or 'HEARTBEAT_WRITTEN' in kuma_smtp_sync.stdout"
+  changed_when: false
+  no_log: true
+
+- name: Install monitoring, alert transport, GoAccess, and Restic scripts
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - { src: monitoring/send-alert.py, dest: /usr/local/sbin/marcelwalder-send-alert }
+    - { src: monitoring/systemd-alert.sh, dest: /usr/local/sbin/marcelwalder-systemd-alert }
+    - { src: monitoring/health-watchdog.sh, dest: /usr/local/sbin/marcelwalder-healthcheck }
+    - { src: monitoring/goaccess-update.sh, dest: /usr/local/sbin/marcelwalder-goaccess-update }
+    - { src: backup/restic-backup.sh, dest: /usr/local/sbin/marcelwalder-restic-backup }
+
+- name: Generate initial GoAccess report if only placeholder exists
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if ! grep -q "goaccess" /var/www/internal/goaccess/index.html 2>/dev/null; then
+      /usr/local/sbin/marcelwalder-goaccess-update
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Install Restic S3 credentials and passphrase environment file
+  ansible.builtin.copy:
+    content: |
+      AWS_ACCESS_KEY_ID={{ oci_s3_access_key_id }}
+      AWS_SECRET_ACCESS_KEY={{ oci_s3_secret_access_key }}
+      AWS_DEFAULT_REGION=eu-frankfurt-1
+      RESTIC_REPOSITORY=s3:https://frlsvddoxbrh.compat.objectstorage.eu-frankfurt-1.oraclecloud.com/backups-marcelwalder-prod
+      RESTIC_PASSWORD={{ restic_password }}
+    dest: /etc/marcelwalder/restic.env
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Install weekly host maintenance script, logrotate, and quota-watchdog
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { src: maintenance/mailserver-update.sh, dest: /opt/mailserver-update.sh, mode: "0755" }
+    - { src: maintenance/mailserver-update.logrotate, dest: /etc/logrotate.d/mailserver-update, mode: "0644" }
+    - { src: maintenance/quota-watchdog.sh, dest: /opt/quota-watchdog.sh, mode: "0755" }
+
+- name: Ensure /usr/local/bin/mailserver-update convenience symlink exists
+  ansible.builtin.file:
+    src: /opt/mailserver-update.sh
+    dest: /usr/local/bin/mailserver-update
+    state: link
+
+- name: Install monitoring, backup, update, and alerting systemd units and timers
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/systemd/{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - marcelwalder-alert@.service
+    - marcelwalder-goaccess.service
+    - marcelwalder-goaccess.timer
+    - marcelwalder-healthcheck.service
+    - marcelwalder-healthcheck.timer
+    - marcelwalder-os-update.service
+    - marcelwalder-os-update.timer
+    - marcelwalder-quota-watchdog.service
+    - marcelwalder-quota-watchdog.timer
+    - marcelwalder-restic-backup.service
+    - marcelwalder-restic-backup.timer
+    - marcelwalder-restic-check.service
+    - marcelwalder-restic-check.timer
+  notify: Reload systemd daemon
+
+- name: Flush handlers before enabling systemd timers
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start monitoring, backup, integrity-check, update, and watchdog timers
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - marcelwalder-goaccess.timer
+    - marcelwalder-restic-backup.timer
+    - marcelwalder-restic-check.timer
+    - marcelwalder-os-update.timer
+    - marcelwalder-quota-watchdog.timer
+    - marcelwalder-healthcheck.timer
+
+- name: Initialize Restic repository and run first encrypted offsite backup
+  ansible.builtin.shell: /usr/local/sbin/marcelwalder-restic-backup && touch /etc/marcelwalder/.restic-bootstrapped
+  args:
+    executable: /bin/bash
+    creates: /etc/marcelwalder/.restic-bootstrapped
+
+- name: Remove legacy cron jobs, local unencrypted backups, and deprecated helper scripts
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/cron.d/mailserver-backup
+    - /etc/cron.d/mailserver-update
+    - /etc/cron.d/quota-watchdog
+    - /opt/mailserver-backup.sh
+    - /usr/local/bin/mailserver-backup
+    - /backup
+    - /opt/get-ssl.sh
+
+- name: Remove duplicate quota-watchdog entry from root user crontab
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if crontab -u root -l 2>/dev/null | grep -qF '/opt/quota-watchdog.sh'; then
+      remaining="$(crontab -u root -l 2>/dev/null | grep -vF '/opt/quota-watchdog.sh' | grep -v '^#' | sed '/^[[:space:]]*$/d' || true)"
+      if [ -z "$remaining" ]; then
+        crontab -u root -r
+      else
+        crontab -u root -l 2>/dev/null | grep -vF '/opt/quota-watchdog.sh' | crontab -u root -
+      fi
+      echo "REMOVED"
+    fi
+  args:
+    executable: /bin/bash
+  register: root_crontab_dedup
+  changed_when: "'REMOVED' in root_crontab_dedup.stdout"

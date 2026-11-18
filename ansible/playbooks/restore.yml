@@ -1,0 +1,88 @@
+---
+- name: Restore critical mail, TLS, WireGuard, and monitoring state from Restic S3 backups
+  hosts: "{{ target_hosts | default('none') }}"
+  become: true
+  tags:
+    - restore
+
+  vars:
+    oci_s3_access_key_id: "{{ lookup('env', 'OCI_S3_ACCESS_KEY_ID') }}"
+    oci_s3_secret_access_key: "{{ lookup('env', 'OCI_S3_SECRET_ACCESS_KEY') }}"
+    restic_password: "{{ lookup('env', 'RESTIC_PASSWORD') }}"
+    restic_repository: "s3:https://frlsvddoxbrh.compat.objectstorage.eu-frankfurt-1.oraclecloud.com/backups-marcelwalder-prod"
+    restore_target_paths:
+      - /etc/letsencrypt
+      - /opt/mailserver
+      - /opt/snappymail
+      - /opt/uptime-kuma/data
+      - /etc/wireguard
+      - /etc/marcelwalder
+
+  tasks:
+    - name: Verify required Restic S3 credentials and passphrase are supplied
+      ansible.builtin.assert:
+        that:
+          - oci_s3_access_key_id | length > 0
+          - oci_s3_secret_access_key | length > 0
+          - restic_password | length > 0
+        fail_msg: "Missing OCI_S3_ACCESS_KEY_ID, OCI_S3_SECRET_ACCESS_KEY, or RESTIC_PASSWORD env vars."
+        quiet: true
+      no_log: true
+
+    - name: Install restic package for backup recovery
+      ansible.builtin.apt:
+        name: restic
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Ensure /etc/marcelwalder configuration directory exists
+      ansible.builtin.file:
+        path: /etc/marcelwalder
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Verify at least one Restic snapshot exists before restoring
+      ansible.builtin.command: restic snapshots --latest 1 --json
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ oci_s3_access_key_id }}"
+        AWS_SECRET_ACCESS_KEY: "{{ oci_s3_secret_access_key }}"
+        AWS_DEFAULT_REGION: eu-frankfurt-1
+        RESTIC_REPOSITORY: "{{ restic_repository }}"
+        RESTIC_PASSWORD: "{{ restic_password }}"
+      changed_when: false
+      no_log: true
+
+    - name: Restore latest Restic snapshot state directories to host filesystem
+      ansible.builtin.command: >
+        restic restore latest --target /
+        {{ restore_target_paths | map('regex_replace', '^', '--include ') | join(' ') }}
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ oci_s3_access_key_id }}"
+        AWS_SECRET_ACCESS_KEY: "{{ oci_s3_secret_access_key }}"
+        AWS_DEFAULT_REGION: eu-frankfurt-1
+        RESTIC_REPOSITORY: "{{ restic_repository }}"
+        RESTIC_PASSWORD: "{{ restic_password }}"
+      changed_when: true
+      no_log: true
+
+    - name: Write current Restic S3 credentials and passphrase environment file
+      ansible.builtin.copy:
+        content: |
+          AWS_ACCESS_KEY_ID={{ oci_s3_access_key_id }}
+          AWS_SECRET_ACCESS_KEY={{ oci_s3_secret_access_key }}
+          AWS_DEFAULT_REGION=eu-frankfurt-1
+          RESTIC_REPOSITORY={{ restic_repository }}
+          RESTIC_PASSWORD={{ restic_password }}
+        dest: /etc/marcelwalder/restic.env
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+    - name: Clear Restic bootstrap marker so harden.yml re-verifies repository connectivity
+      ansible.builtin.file:
+        path: /etc/marcelwalder/.restic-bootstrapped
+        state: absent

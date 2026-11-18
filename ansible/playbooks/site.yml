@@ -2,10 +2,46 @@
 - name: Deploy marcelwalder.eu static CV and Nginx security headers
   hosts: web_hosts
   gather_facts: false
+  tags:
+    - site
 
   vars:
     site_src: "{{ playbook_dir }}/../../site/"
     site_dest: "/var/www/marcelwalder.eu"
+    acme_certificates:
+      - domain: marcelwalder.eu
+        server_names: "marcelwalder.eu www.marcelwalder.eu"
+        webroot: /var/www/marcelwalder.eu
+        cert_name: marcelwalder.eu
+        live_dir: marcelwalder.eu
+        cert_domains:
+          - marcelwalder.eu
+          - www.marcelwalder.eu
+        site_file: marcelwalder.eu
+      - domain: mail.marcelwalder.eu
+        server_names: "mail.marcelwalder.eu"
+        webroot: /var/www/mail
+        cert_name: mail.marcelwalder.eu-0001
+        live_dir: mail.marcelwalder.eu-0001
+        cert_domains:
+          - mail.marcelwalder.eu
+        site_file: mail
+      - domain: mta-sts.marcelwalder.eu
+        server_names: "mta-sts.marcelwalder.eu"
+        webroot: /var/www/mta-sts
+        cert_name: mta-sts.marcelwalder.eu
+        live_dir: mta-sts.marcelwalder.eu
+        cert_domains:
+          - mta-sts.marcelwalder.eu
+        site_file: mta-sts
+      - domain: status.marcelwalder.eu
+        server_names: "status.marcelwalder.eu"
+        webroot: /var/www/certbot-status
+        cert_name: status.marcelwalder.eu
+        live_dir: status.marcelwalder.eu
+        cert_domains:
+          - status.marcelwalder.eu
+        site_file: status.marcelwalder.eu
 
   tasks:
     - name: Ensure target web root directory exists
@@ -160,6 +196,68 @@
         state: link
       notify: Validate and reload nginx
 
+    - name: Check whether Let's Encrypt TLS certificates exist for all four domains
+      become: true
+      ansible.builtin.stat:
+        path: "/etc/letsencrypt/live/{{ item.live_dir }}/fullchain.pem"
+      loop: "{{ acme_certificates }}"
+      register: acme_cert_stats
+
+    - name: Install HTTP ACME bootstrap vhost for domains missing certificates
+      become: true
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../files/nginx/acme-bootstrap.conf.j2"
+        dest: "/etc/nginx/sites-available/{{ item.item.site_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ acme_cert_stats.results }}"
+      when: not item.stat.exists
+
+    - name: Enable HTTP ACME bootstrap vhost before webroot challenge
+      become: true
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ item.item.site_file }}"
+        dest: "/etc/nginx/sites-enabled/{{ item.item.site_file }}"
+        state: link
+      loop: "{{ acme_cert_stats.results }}"
+      when: not item.stat.exists
+
+    - name: Reload Nginx before ACME webroot challenge when any certificate is missing
+      become: true
+      ansible.builtin.shell: nginx -t && systemctl reload nginx
+      when: acme_cert_stats.results | selectattr('stat.exists', 'equalto', false) | list | length > 0
+      changed_when: true
+
+    - name: Issue initial Let's Encrypt ECDSA certificates via webroot challenge
+      become: true
+      ansible.builtin.command: >
+        certbot certonly --webroot -w {{ item.item.webroot }}
+        --non-interactive --agree-tos --email info@marcelwalder.eu
+        --key-type ecdsa --cert-name {{ item.item.cert_name }}
+        {{ item.item.cert_domains | map('regex_replace', '^', '-d ') | join(' ') }}
+      loop: "{{ acme_cert_stats.results }}"
+      when: not item.stat.exists
+      changed_when: true
+
+    - name: Ensure Certbot Nginx TLS options file exists on fresh hosts
+      become: true
+      ansible.builtin.copy:
+        src: /usr/lib/python3/dist-packages/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf
+        dest: /etc/letsencrypt/options-ssl-nginx.conf
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0644"
+        force: false
+      failed_when: false
+
+    - name: Generate Diffie-Hellman parameters if absent on fresh hosts
+      become: true
+      ansible.builtin.command: openssl dhparam -out /etc/letsencrypt/ssl-dhparams.pem 2048
+      args:
+        creates: /etc/letsencrypt/ssl-dhparams.pem
+
     - name: Install marcelwalder.eu Nginx virtual host config
       become: true
       ansible.builtin.copy:
@@ -177,43 +275,6 @@
         dest: /etc/nginx/sites-enabled/marcelwalder.eu
         state: link
       notify: Validate and reload nginx
-
-    - name: Check whether status.marcelwalder.eu TLS certificate exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/letsencrypt/live/status.marcelwalder.eu/fullchain.pem
-      register: status_cert
-
-    - name: Install HTTP bootstrap vhost for status.marcelwalder.eu ACME issuance
-      become: true
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/../files/nginx/status.marcelwalder.eu.bootstrap.conf"
-        dest: /etc/nginx/sites-available/status.marcelwalder.eu
-        owner: root
-        group: root
-        mode: "0644"
-      when: not status_cert.stat.exists
-
-    - name: Enable status.marcelwalder.eu site before ACME challenge
-      become: true
-      ansible.builtin.file:
-        src: /etc/nginx/sites-available/status.marcelwalder.eu
-        dest: /etc/nginx/sites-enabled/status.marcelwalder.eu
-        state: link
-      when: not status_cert.stat.exists
-
-    - name: Reload Nginx with HTTP bootstrap vhost before Certbot webroot challenge
-      become: true
-      ansible.builtin.shell: nginx -t && systemctl reload nginx
-      when: not status_cert.stat.exists
-
-    - name: Issue Let's Encrypt ECDSA certificate for status.marcelwalder.eu
-      become: true
-      ansible.builtin.command: >
-        certbot certonly --webroot -w /var/www/certbot-status
-        --non-interactive --agree-tos --email info@marcelwalder.eu
-        --key-type ecdsa -d status.marcelwalder.eu
-      when: not status_cert.stat.exists
 
     - name: Install status.marcelwalder.eu Nginx reverse-proxy virtual host config
       become: true
@@ -233,12 +294,6 @@
         state: link
       notify: Validate and reload nginx
 
-    - name: Check whether mail.marcelwalder.eu TLS certificate exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/letsencrypt/live/mail.marcelwalder.eu-0001/fullchain.pem
-      register: mail_cert
-
     - name: Install mail.marcelwalder.eu Nginx reverse-proxy virtual host config
       become: true
       ansible.builtin.copy:
@@ -247,7 +302,6 @@
         owner: root
         group: root
         mode: "0644"
-      when: mail_cert.stat.exists
       notify: Validate and reload nginx
 
     - name: Ensure mail.marcelwalder.eu Nginx site is enabled
@@ -256,7 +310,6 @@
         src: /etc/nginx/sites-available/mail
         dest: /etc/nginx/sites-enabled/mail
         state: link
-      when: mail_cert.stat.exists
       notify: Validate and reload nginx
 
     - name: Deploy BIMI SVG avatar concepts to /var/www/mail
@@ -291,12 +344,6 @@
         group: root
         mode: "0644"
 
-    - name: Check whether mta-sts.marcelwalder.eu TLS certificate exists
-      become: true
-      ansible.builtin.stat:
-        path: /etc/letsencrypt/live/mta-sts.marcelwalder.eu/fullchain.pem
-      register: mta_sts_cert
-
     - name: Install mta-sts.marcelwalder.eu Nginx virtual host config
       become: true
       ansible.builtin.copy:
@@ -305,7 +352,6 @@
         owner: root
         group: root
         mode: "0644"
-      when: mta_sts_cert.stat.exists
       notify: Validate and reload nginx
 
     - name: Ensure mta-sts.marcelwalder.eu Nginx site is enabled
@@ -314,7 +360,6 @@
         src: /etc/nginx/sites-available/mta-sts
         dest: /etc/nginx/sites-enabled/mta-sts
         state: link
-      when: mta_sts_cert.stat.exists
       notify: Validate and reload nginx
 
     - name: Install internal-only GoAccess & node_exporter Nginx vhost

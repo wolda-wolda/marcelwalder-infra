@@ -1,15 +1,15 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name status.marcelwalder.eu;
+    server_name {{ item.server_names }};
 
     location /.well-known/acme-challenge/ {
-        root /var/www/certbot-status;
+        root {{ item.webroot }};
         try_files $uri =404;
     }
 
     location / {
-        return 200 "status.marcelwalder.eu ACME bootstrap\n";
+        return 200 "{{ item.domain }} ACME bootstrap\n";
         add_header Content-Type text/plain;
     }
 }

@@ -80,7 +80,16 @@ if [ "$METRICS_CODE" != "200" ]; then
     FAILURES+=("node_exporter (127.0.0.1:9100/metrics) returned HTTP ${METRICS_CODE}.")
 fi
 
-# 6. Geoblock nftables table
+# 6. Host & Geoblock nftables tables
+if ! nft list table inet marcelwalder_host >/dev/null 2>&1; then
+    nft -f /etc/nftables.conf >/dev/null 2>&1 || true
+    if nft list table inet marcelwalder_host >/dev/null 2>&1; then
+        HEALED+=("nftables table 'inet marcelwalder_host' was missing and restored.")
+    else
+        FAILURES+=("nftables table 'inet marcelwalder_host' is missing and could not be restored.")
+    fi
+fi
+
 if ! nft list table inet marcelwalder_geoblock >/dev/null 2>&1; then
     systemctl start marcelwalder-geoblock.service >/dev/null 2>&1 || true
     if nft list table inet marcelwalder_geoblock >/dev/null 2>&1; then

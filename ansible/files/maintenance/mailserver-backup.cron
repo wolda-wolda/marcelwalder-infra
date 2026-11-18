@@ -1,2 +1,0 @@
-# Daily automated backup of mailboxes, configs, and certs at 02:00 UTC
-0 2 * * * root /opt/mailserver-backup.sh > /dev/null 2>&1

@@ -127,10 +127,12 @@ if [ "$METRICS_HTTP" != "200" ]; then
     ERROR_MSG="${ERROR_MSG}node_exporter /metrics returned HTTP $METRICS_HTTP.\n"
 fi
 
-if ! nft list table inet marcelwalder_geoblock >/dev/null 2>&1; then
-    HEALTH_OK=false
-    ERROR_MSG="${ERROR_MSG}nftables table inet marcelwalder_geoblock is not loaded.\n"
-fi
+for tbl in marcelwalder_host marcelwalder_geoblock; do
+    if ! nft list table inet "$tbl" >/dev/null 2>&1; then
+        HEALTH_OK=false
+        ERROR_MSG="${ERROR_MSG}nftables table inet ${tbl} is not loaded.\n"
+    fi
+done
 
 # 6. Disk Cleanup & Reporting
 echo "[6/6] Performing cleanup and notification..."

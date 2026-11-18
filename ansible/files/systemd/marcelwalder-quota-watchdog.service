@@ -1,0 +1,8 @@
+[Unit]
+Description=Hourly OCI relay quota, disk, and Always-Free memory watchdog
+After=docker.service
+OnFailure=marcelwalder-alert@%n.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/quota-watchdog.sh

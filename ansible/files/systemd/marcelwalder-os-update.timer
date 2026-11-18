@@ -1,0 +1,9 @@
+[Unit]
+Description=Weekly Sunday host OS update timer
+
+[Timer]
+OnCalendar=Sun *-*-* 03:45:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

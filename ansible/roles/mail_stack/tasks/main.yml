@@ -1,0 +1,201 @@
+---
+- name: Ensure Docker daemon configuration directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure Docker daemon JSON log rotation
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/monitoring/docker-daemon.json"
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  register: docker_daemon_cfg
+
+- name: Restart Docker daemon to apply new log rotation defaults
+  ansible.builtin.systemd_service:
+    name: docker
+    state: restarted
+  when: docker_daemon_cfg.changed
+
+- name: Ensure existing mailserver and snappymail stacks adopt log rotation once
+  ansible.builtin.shell: |
+    set -euo pipefail
+    for stack in mailserver snappymail; do
+      dir="/opt/${stack}"
+      if [ -f "${dir}/docker-compose.yml" ] && docker inspect "$stack" >/dev/null 2>&1; then
+        cfg="$(docker inspect --format '{% raw %}{{json .HostConfig.LogConfig.Config}}{% endraw %}' "$stack")"
+        if [ "$cfg" = "{}" ] || [ "$cfg" = "null" ]; then
+          docker compose -f "${dir}/docker-compose.yml" up -d --force-recreate
+        fi
+      fi
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Ensure mailserver and SnappyMail directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /opt/mailserver, mode: "0755" }
+    - { path: /opt/mailserver/config, mode: "0750" }
+    - { path: /opt/snappymail, mode: "0755" }
+
+- name: Install Docker-Mailserver Compose manifest
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/mailserver/docker-compose.yml"
+    dest: /opt/mailserver/docker-compose.yml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install Docker-Mailserver environment configuration
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/mailserver/mailserver.env"
+    dest: /opt/mailserver/mailserver.env
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Install non-secret Docker-Mailserver config files
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/mailserver/{{ item }}"
+    dest: "/opt/mailserver/config/{{ item }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+    - before.dovecot.sieve
+    - postfix-virtual.cf
+
+- name: Ensure placeholder Docker-Mailserver config files exist if missing
+  ansible.builtin.copy:
+    content: ""
+    dest: "/opt/mailserver/config/{{ item }}"
+    owner: root
+    group: root
+    mode: "0640"
+    force: false
+  loop:
+    - dovecot-quotas.cf
+    - postfix-main.cf
+
+- name: Enforce restrictive permissions on placeholder Docker-Mailserver config files
+  ansible.builtin.file:
+    path: "/opt/mailserver/config/{{ item }}"
+    state: file
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+    - dovecot-quotas.cf
+    - postfix-main.cf
+
+- name: Check secret Docker-Mailserver config files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /opt/mailserver/config/postfix-accounts.cf
+    - /opt/mailserver/config/postfix-sasl-password.cf
+  register: mailserver_secret_files
+
+- name: Restrict secret Docker-Mailserver config file permissions
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    owner: root
+    group: root
+    mode: "0600"
+  loop: "{{ mailserver_secret_files.results }}"
+  when: item.stat.exists
+
+- name: Ensure Docker-Mailserver container matches pinned GitOps image
+  ansible.builtin.command: docker compose -f /opt/mailserver/docker-compose.yml up -d --remove-orphans
+  register: mailserver_up
+  changed_when: >-
+    'Started' in mailserver_up.stderr
+    or 'Created' in mailserver_up.stderr
+    or 'Recreated' in mailserver_up.stderr
+  when: mailserver_secret_files.results[0].stat.exists
+
+- name: Install SnappyMail Docker Compose manifest
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/mailserver/snappymail-compose.yml"
+    dest: /opt/snappymail/docker-compose.yml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure SnappyMail container matches pinned GitOps image
+  ansible.builtin.command: docker compose -f /opt/snappymail/docker-compose.yml up -d --remove-orphans
+  register: snappymail_up
+  changed_when: >-
+    'Started' in snappymail_up.stderr
+    or 'Created' in snappymail_up.stderr
+    or 'Recreated' in snappymail_up.stderr
+
+- name: Wait for SnappyMail HTTP backend on localhost:8888
+  ansible.builtin.uri:
+    url: http://127.0.0.1:8888/
+    status_code: [200]
+  register: snappymail_health
+  retries: 20
+  delay: 3
+  until: snappymail_health.status is defined and snappymail_health.status == 200
+
+- name: Check whether SnappyMail configuration exists
+  ansible.builtin.stat:
+    path: /opt/snappymail/volume/_data_/_default_/configs/application.ini
+  register: snappymail_ini
+
+- name: Keep SnappyMail web admin panel disabled by default
+  ansible.builtin.lineinfile:
+    path: /opt/snappymail/volume/_data_/_default_/configs/application.ini
+    regexp: '^\s*allow_admin_panel\s*='
+    line: "allow_admin_panel = Off"
+  when: snappymail_ini.stat.exists
+
+- name: Ensure SnappyMail container runs patched internal Nginx binary in memory
+  ansible.builtin.shell: |
+    set -euo pipefail
+    if docker inspect snappymail >/dev/null 2>&1; then
+      docker exec snappymail sh -c 'apk update -q && apk upgrade --no-cache -q nginx libpq libecpg'
+      if docker exec snappymail sh -c 'ls -l /proc/$(cat /tmp/nginx.pid)/exe' 2>/dev/null | grep -q '(deleted)'; then
+        docker restart snappymail
+      fi
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Ensure Let's Encrypt deploy renewal hooks directory exists
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install Let's Encrypt deploy hook to reload Nginx and restart mailserver
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/maintenance/reload-mailserver.sh"
+    dest: /etc/letsencrypt/renewal-hooks/deploy/reload-mailserver.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install hardened mail-avatar BIMI CLI utility
+  ansible.builtin.copy:
+    src: "{{ role_path }}/../../files/maintenance/mail-avatar.py"
+    dest: /usr/local/bin/mail-avatar
+    owner: root
+    group: root
+    mode: "0755"

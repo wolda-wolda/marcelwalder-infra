@@ -62,4 +62,10 @@ restic forget \
     --keep-weekly 8 \
     --keep-monthly 6
 
+HEARTBEAT_URL_FILE="/etc/marcelwalder/restic-heartbeat.url"
+if [ -s "$HEARTBEAT_URL_FILE" ]; then
+    HEARTBEAT_URL="$(cat "$HEARTBEAT_URL_FILE")"
+    curl -fsS --max-time 10 "$HEARTBEAT_URL" >/dev/null || echo "WARN: Failed to ping Restic dead-man's-switch heartbeat" >&2
+fi
+
 echo "Restic encrypted offsite backup completed cleanly."
